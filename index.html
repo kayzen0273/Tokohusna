@@ -121,7 +121,7 @@
 
     <style>
         html, body { overscroll-behavior-y: none; }
-        body { font-family: 'Inter', sans-serif; background-color: #f0f9ff; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+        body { font-family: 'Inter', sans-serif; background-color: #ffffff; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -142,8 +142,8 @@
         @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
 
         .kasir-pattern {
-            background-color: #f0f9ff;
-            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%230ea5e9' fill-opacity='0.04'%3E%3Crect x='10' y='10' width='8' height='12' rx='1'/%3E%3Crect x='10' y='26' width='8' height='2' rx='1'/%3E%3Crect x='10' y='30' width='5' height='2' rx='1'/%3E%3Crect x='10' y='34' width='8' height='2' rx='1'/%3E%3Ccircle cx='42' cy='20' r='6'/%3E%3Crect x='36' y='30' width='12' height='8' rx='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            background-color: #ffffff;
+            background-image: none;
         }
 
         .font-arab { font-family: 'Amiri', serif; }
@@ -200,7 +200,7 @@
         /* AUTH SCREEN STYLES */
         .auth-bg {
             min-height: 100vh;
-            background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 40%, #0c4a6e 70%, #075985 100%);
+            background: #ffffff;
             position: relative;
             overflow: hidden;
         }
@@ -208,13 +208,12 @@
             content: '';
             position: absolute;
             inset: 0;
-            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%230ea5e9' fill-opacity='0.06'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            background-image: none;
         }
         .auth-card {
-            background: rgba(255,255,255,0.97);
-            backdrop-filter: blur(20px);
+            background: #ffffff;
             border-radius: 24px;
-            box-shadow: 0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1);
+            box-shadow: 0 4px 32px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06);
         }
         .auth-input {
             width: 100%;
@@ -274,7 +273,7 @@
         .exp-banner-exit  { animation: expBannerOut 0.4s  ease-in            forwards; }
     </style>
 </head>
-<body class="islamic-pattern relative">
+<body class="relative">
     <div id="root" class="relative z-10"></div>
 
     <!-- React App (Babel) -->
@@ -657,73 +656,11 @@
 
 
 
-        // --- DEKORASI KASIR MODERN ---
-        const RamadhanDecor = () => (
+        // --- DEKORASI KASIR MODERN (dinonaktifkan) ---
+        const RamadhanDecor = () => null;
+        const _RamadhanDecor_DISABLED = () => (
             <div className="fixed inset-0 pointer-events-none overflow-hidden" style={{zIndex: -1}}>
-                {/* Partikel koin & receipt melayang */}
-                <div className="absolute inset-0 z-0">
-                    {[...Array(16)].map((_, i) => (
-                        <div key={i} className="absolute opacity-0 animate-float-up"
-                             style={{
-                                 left: Math.random() * 100 + '%',
-                                 animationDelay: Math.random() * 12 + 's',
-                                 animationDuration: Math.random() * 10 + 12 + 's',
-                                 fontSize: (Math.random() * 8 + 8) + 'px',
-                                 color: i % 4 === 0 ? '#f59e0b' : i % 4 === 1 ? '#38bdf8' : i % 4 === 2 ? '#34d399' : '#a78bfa',
-                             }}>
-                            {i % 4 === 0 ? '💰' : i % 4 === 1 ? '🧾' : i % 4 === 2 ? '🛒' : '💳'}
-                        </div>
-                    ))}
-                </div>
-
-                {/* Titik-titik glowing tech */}
-                <div className="absolute top-8 left-[8%] w-1.5 h-1.5 rounded-full bg-sky-400 animate-twinkle opacity-50" style={{animationDelay:'0.2s'}}></div>
-                <div className="absolute top-20 left-[30%] w-1 h-1 rounded-full bg-emerald-400 animate-twinkle opacity-40" style={{animationDelay:'1.1s'}}></div>
-                <div className="absolute top-6 right-[18%] w-2 h-2 rounded-full bg-amber-400 animate-twinkle opacity-60" style={{animationDelay:'0.5s'}}></div>
-                <div className="absolute top-14 right-[40%] w-1 h-1 rounded-full bg-violet-400 animate-twinkle opacity-45" style={{animationDelay:'1.8s'}}></div>
-                <div className="absolute top-28 left-[55%] w-1.5 h-1.5 rounded-full bg-sky-300 animate-twinkle opacity-35" style={{animationDelay:'0.9s'}}></div>
-
-                {/* Shooting line (bukan bintang jatuh, lebih seperti laser scan) */}
-                <div className="absolute -top-10 right-10 w-24 h-0.5 bg-gradient-to-l from-transparent via-sky-400 to-transparent opacity-30 animate-falling-star"></div>
-
-                {/* Gantungan kiri: Icon Kasir / Register */}
-                <div className="absolute -top-8 left-2 md:left-12 z-0 animate-swing origin-top" style={{animationDuration:'4200ms'}}>
-                    <div className="h-20 md:h-32 w-[1px] bg-sky-400/50 mx-auto"></div>
-                    <div className="text-sky-500 text-4xl md:text-6xl drop-shadow-md relative z-10"><Icon name="cash-register" /></div>
-                </div>
-
-                {/* Gantungan kedua kiri: Receipt tag */}
-                <div className="absolute -top-14 left-20 md:left-40 z-0 animate-sway origin-top" style={{animationDuration:'5800ms'}}>
-                    <div className="h-28 md:h-44 w-[1px] bg-sky-400/30 mx-auto"></div>
-                    <div className="flex flex-col items-center gap-1">
-                        <div className="receipt-tag">
-                            <div className="receipt-tag-line"></div>
-                            <div className="receipt-tag-line short"></div>
-                            <div className="receipt-tag-line"></div>
-                            <div className="receipt-tag-line short"></div>
-                        </div>
-                        <div className="h-3 w-[1px] bg-sky-400/30 mx-auto"></div>
-                        <div className="text-sky-500 text-[10px]"><Icon name="receipt" /></div>
-                    </div>
-                </div>
-
-                {/* Gantungan tengah: Barcode scanner */}
-                <div className="absolute -top-12 left-[30%] hidden md:block z-0 animate-swing-slow origin-top" style={{animationDuration:'4800ms'}}>
-                    <div className="h-20 w-[1px] bg-emerald-400/40 mx-auto"></div>
-                    <div className="text-emerald-500 text-2xl drop-shadow-md animate-pulse"><Icon name="barcode" /></div>
-                </div>
-
-                {/* Gantungan kanan: Shopping cart */}
-                <div className="absolute -top-8 right-4 md:right-12 z-0 animate-swing origin-top" style={{animationDuration:'3800ms'}}>
-                    <div className="h-20 md:h-32 w-[1px] bg-amber-400/50 mx-auto"></div>
-                    <div className="text-amber-500 text-4xl md:text-6xl drop-shadow-md relative z-10"><Icon name="cart-shopping" /></div>
-                </div>
-
-                {/* Gantungan kedua kanan: Koin */}
-                <div className="absolute -top-14 right-20 md:right-40 z-0 animate-sway origin-top" style={{animationDuration:'5200ms'}}>
-                    <div className="h-28 md:h-44 w-[1px] bg-amber-400/30 mx-auto"></div>
-                    <div className="coin-decor">Rp</div>
-                </div>
+                {/* SEMUA DEKORASI & ANIMASI DINONAKTIFKAN */}
 
                 {/* Siluet toko / ruko di bawah */}
                 <div className="absolute bottom-0 left-0 right-0 pointer-events-none overflow-hidden" style={{opacity: 0.06}}>
@@ -7230,12 +7167,12 @@
 
             if (!isSessionActive) {
                 return (
-                    <div className="fade-in h-full overflow-y-auto pb-20 md:pb-0 flex flex-col items-center md:justify-start md:pt-8 justify-center relative z-10">
-                        <div className="w-full max-w-sm px-4 flex flex-col items-center">
+                    <div className="fade-in h-full overflow-y-auto pb-20 md:pb-0 flex flex-col relative z-10" style={{background:'#fff'}}>
+                        <div className="w-full flex flex-col" style={{fontFamily:"'Nunito', sans-serif"}}>
 
                              {/* BANNER STATUS ONLINE/OFFLINE */}
                              {!isOnline && (
-                                 <div className="w-full mb-3 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 fade-in">
+                                 <div className="mx-2 mt-3 mb-0 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 flex items-center gap-2.5 fade-in">
                                      <div className="w-6 h-6 bg-amber-400 rounded-full flex items-center justify-center flex-shrink-0">
                                          <Icon name="wifi" className="text-white text-[10px]" />
                                      </div>
@@ -7248,13 +7185,13 @@
 
                              {/* BANNER SINKRONISASI */}
                              {isSyncing && (
-                                 <div className="w-full mb-3 bg-sky-50 border border-sky-200 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 fade-in">
-                                     <Icon name="spinner" className="text-sky-500 animate-spin text-sm flex-shrink-0" />
-                                     <p className="text-xs font-bold text-sky-700">Menyinkronkan transaksi offline...</p>
+                                 <div className="mx-2 mt-2 bg-teal-50 border border-teal-200 rounded-xl px-3 py-2.5 flex items-center gap-2.5 fade-in">
+                                     <Icon name="spinner" className="animate-spin text-sm flex-shrink-0" style={{color:'#118989'}} />
+                                     <p className="text-xs font-bold" style={{color:'#118989'}}>Menyinkronkan transaksi offline...</p>
                                  </div>
                              )}
                              {isOnline && offlineQueue.length > 0 && !isSyncing && (
-                                 <div className="w-full mb-3 bg-green-50 border border-green-200 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 fade-in">
+                                 <div className="mx-2 mt-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2.5 flex items-center gap-2.5 fade-in">
                                      <Icon name="check-circle" className="text-green-500 text-sm flex-shrink-0" />
                                      <div className="flex-1">
                                          <p className="text-xs font-black text-green-700">{offlineQueue.length} transaksi menunggu sinkronisasi</p>
@@ -7263,122 +7200,122 @@
                                  </div>
                              )}
 
-                             {/* BANNER TOKO AKTIF */}
-                             <div className="mb-4 bg-white/60 backdrop-blur-md p-4 rounded-2xl border border-white shadow-sm w-full text-center">
-                                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">POS Kasir Aktif</p>
-                                <h2 className="text-xl font-black text-slate-800 flex items-center justify-center gap-2">
-                                    <Icon name="store" className="text-sky-600" /> {currentProfile.name}
-                                </h2>
-                                {/* Indikator status koneksi di dalam banner */}
-                                <div className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${isOnline ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                                    <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-green-500' : 'bg-amber-500'}`}></span>
-                                    {isOnline ? 'Online' : 'Offline'}
-                                    {offlineQueue.length > 0 && isOnline && <span className="ml-1 bg-orange-400 text-white rounded-full px-1.5 text-[9px]">{offlineQueue.length} pending</span>}
-                                </div>
+                             {/* ── PAGE HEADER: Kasir + Tombol + ── */}
+                             <div className="flex items-center justify-between px-2 pt-3 pb-2">
+                                 <div style={{fontSize:'26px', fontWeight:800, color:'#111', lineHeight:1.1}}>Kasir</div>
+                                 <button
+                                     onClick={() => handleStartSession(cashierName)}
+                                     title="Penjualan Baru"
+                                     style={{width:'38px',height:'38px',borderRadius:'8px',border:'1.5px solid #bbb',background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,transition:'background .1s'}}
+                                     onMouseDown={e=>e.currentTarget.style.background='#f0f0f0'}
+                                     onMouseUp={e=>e.currentTarget.style.background='#fff'}
+                                 >
+                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2.5" strokeLinecap="round">
+                                         <line x1="12" y1="5" x2="12" y2="19"/>
+                                         <line x1="5" y1="12" x2="19" y2="12"/>
+                                     </svg>
+                                 </button>
                              </div>
 
-                             {/* Tombol Penjualan Baru - compact, di bawah banner */}
-                             <button onClick={() => handleStartSession(cashierName)} className="w-full mb-3 bg-sky-500 hover:bg-sky-600 active:scale-95 text-white rounded-2xl px-4 py-3 flex items-center justify-between shadow-md transition-all group">
-                                 <div className="flex items-center gap-3">
-                                     <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
-                                         <Icon name="cart-plus" />
-                                     </div>
-                                     <div className="text-left">
-                                         <p className="font-black text-sm leading-none">+ Penjualan Baru</p>
-                                         <p className="text-[10px] text-sky-100 mt-0.5">👤 {cashierName}</p>
-                                     </div>
-                                 </div>
-                                 <Icon name="chevron-right" className="text-sky-200 text-sm" />
-                             </button>
-
-                             {/* ── TOMBOL MODE OFFLINE ────────────────────────────────── */}
+                             {/* ── TOMBOL MODE OFFLINE ── */}
+                             <div style={{padding:'0 8px 12px 8px'}}>
                              <button
                                  onClick={startOfflineMode}
-                                 className={`w-full mb-4 rounded-2xl px-4 py-3 flex items-center justify-between shadow-sm transition-all group active:scale-95 border-2 ${
-                                     !isOnline
-                                         ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-400'
-                                         : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200 hover:border-amber-300'
-                                 }`}
-                                 title="Mode tanpa internet — transaksi disimpan lokal & otomatis tersinkron saat online"
+                                 style={{
+                                     width:'100%', borderRadius:'10px', padding:'8px 14px',
+                                     display:'flex', alignItems:'center', justifyContent:'space-between',
+                                     gap:'8px', cursor:'pointer', transition:'all .15s ease',
+                                     fontFamily:"'Nunito',sans-serif", fontWeight:700, fontSize:'14.5px',
+                                     border: !isOnline ? '1.5px solid #ffd0c0' : '1.5px solid #dcdcdc',
+                                     background: !isOnline ? '#fff0eb' : '#f9f9f9',
+                                     color: !isOnline ? '#e8460a' : '#555',
+                                 }}
                              >
-                                 <div className="flex items-center gap-3">
-                                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg group-hover:scale-110 transition-transform ${!isOnline ? 'bg-white/20' : 'bg-amber-100'}`}>
-                                         <Icon name="plug" className={!isOnline ? 'text-white' : 'text-amber-500'} />
-                                     </div>
-                                     <div className="text-left">
-                                         <p className={`font-black text-sm leading-none ${!isOnline ? 'text-white' : 'text-slate-700'}`}>Mode Offline</p>
-                                         <p className={`text-[10px] mt-0.5 ${!isOnline ? 'text-amber-100' : 'text-slate-400'}`}>
-                                             {offlineQueue.length > 0 ? `${offlineQueue.length} transaksi belum tersinkron` : 'Transaksi disimpan lokal, sync otomatis'}
-                                         </p>
-                                     </div>
+                                 <div style={{display:'flex',alignItems:'center',gap:'7px'}}>
+                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                         <line x1="1" y1="1" x2="23" y2="23"/>
+                                         <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+                                         <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
+                                         <path d="M10.71 5.05A16 16 0 0 1 22.58 9"/>
+                                         <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
+                                         <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                                         <line x1="12" y1="20" x2="12.01" y2="20"/>
+                                     </svg>
+                                     Mode Offline
                                  </div>
-                                 <div className="flex items-center gap-1.5">
+                                 <div style={{display:'flex',alignItems:'center',gap:'4px'}}>
                                      {offlineQueue.length > 0 && (
-                                         <span className="w-5 h-5 bg-orange-400 text-white rounded-full text-[10px] font-black flex items-center justify-center">{offlineQueue.length}</span>
+                                         <span style={{background:'#e8460a',color:'#fff',fontSize:'10px',fontWeight:800,borderRadius:'99px',minWidth:'19px',height:'19px',display:'flex',alignItems:'center',justifyContent:'center',padding:'0 4px',border:'2px solid #efefef'}}>{offlineQueue.length}</span>
                                      )}
-                                     <Icon name="chevron-right" className={`text-sm ${!isOnline ? 'text-amber-200' : 'text-slate-300'}`} />
+                                     <Icon name="chevron-right" className="text-sm" style={{color: !isOnline ? '#ffd0c0' : '#ccc'}} />
                                  </div>
                              </button>
+                             </div>
                              {/* ───────────────────────────────────────────────────────── */}
 
+                             {/* ── TRANSACTION LIST (tx-item style) ── */}
+                             <div style={{borderTop:'1px solid #e8e8e8'}}>
                              {(activeCarts.length > 0 || pendingCarts.length > 0) && (
-                                <div className="w-full mb-4 fade-in">
-                                    <div className="flex items-center justify-between mb-2 px-0.5">
-                                        <div className="flex items-center gap-1.5">
-                                            <Icon name="clock-rotate-left" className="text-sky-500 text-xs" />
-                                            <h3 className="font-bold text-slate-600 text-xs">Keranjang di {currentProfile.name}</h3>
-                                        </div>
-                                        <span className="text-[9px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full font-bold">{activeCarts.length + pendingCarts.length} keranjang</span>
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        {/* Keranjang aktif (live, milik kasir lain) */}
-                                        {activeCarts.map(ac => {
-                                            const total = ac.total || (ac.items || []).reduce((s, i) => s + (i.price || 0) * (i.cartQty || 1), 0);
-                                            return (
-                                                <div key={ac.id} className="w-full bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2 relative overflow-hidden">
-                                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-sky-400 to-sky-600"></div>
-                                                    <div className="w-7 h-7 bg-sky-500 rounded-full flex items-center justify-center text-white text-[10px] font-black flex-shrink-0 ml-1">
-                                                        {(ac.cashierName || '?').charAt(0).toUpperCase()}
-                                                    </div>
-                                                    <div className="text-left flex-1 min-w-0">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <p className="font-bold text-sky-700 text-[11px] truncate">{ac.cashierName || 'Kasir'}</p>
-                                                        </div>
-                                                        <div className="flex items-center gap-1.5 mt-0.5">
-                                                            <p className="font-black text-slate-800 text-sm transition-all">{formatRupiah(total)}</p>
-                                                            <span className="text-[9px] text-slate-400">{(ac.items || []).length} barang</span>
-                                                        </div>
-                                                    </div>
+                                <div className="fade-in">
+                                    {/* Keranjang aktif (live, milik kasir lain) */}
+                                    {activeCarts.map(ac => {
+                                        const total = ac.total || (ac.items || []).reduce((s, i) => s + (i.price || 0) * (i.cartQty || 1), 0);
+                                        return (
+                                            <div key={ac.id} style={{display:'flex',alignItems:'center',padding:'9px 8px',borderBottom:'1px solid #e8e8e8',gap:'10px'}}>
+                                                <div style={{flex:1,display:'flex',flexDirection:'column',gap:'1px'}}>
+                                                    <div style={{fontSize:'14px',fontWeight:800,color:'#111'}}>{formatRupiah(total)}</div>
+                                                    <div style={{fontSize:'12px',fontWeight:600,color:'#444'}}>{(ac.items || []).length} barang • Sedang aktif</div>
+                                                    <div style={{fontSize:'12px',fontWeight:600,color:'#555'}}>{ac.cashierName || 'Kasir'}</div>
                                                 </div>
-                                            );
-                                        })}
-                                        {/* Keranjang tertunda (bisa dilanjutkan) */}
-                                        {pendingCarts.map(pending => (
-                                            <button key={pending.id} onClick={() => resumeTransaction(pending)} className="w-full bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-sky-300 transition-all flex items-center gap-2 group relative overflow-hidden">
-                                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-sky-400 to-sky-600"></div>
-                                                <div className="w-7 h-7 bg-sky-500 rounded-full flex items-center justify-center text-white text-[10px] font-black flex-shrink-0 ml-1">
-                                                    {(pending.cashierName || '?').charAt(0).toUpperCase()}
+                                                <div style={{color:'#ccc',flexShrink:0,display:'flex',alignItems:'center'}}>
+                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
                                                 </div>
-                                                <div className="text-left flex-1 min-w-0">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <p className="font-bold text-sky-700 text-[11px] truncate">{pending.cashierName || 'Kasir'}</p>
-                                                        <span className="text-[9px] text-slate-400 font-medium flex-shrink-0">{new Date(pending.date).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                                        <p className="font-black text-slate-800 text-sm">{formatRupiah(pending.total)}</p>
-                                                        <span className="text-[9px] text-slate-400">{pending.items.length} barang</span>
-                                                    </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {/* Keranjang tertunda (bisa dilanjutkan) */}
+                                    {pendingCarts.map(pending => (
+                                        <button key={pending.id} onClick={() => resumeTransaction(pending)} style={{width:'100%',display:'flex',alignItems:'center',padding:'9px 8px',borderBottom:'1px solid #e8e8e8',gap:'10px',background:'#fff',cursor:'pointer',textAlign:'left',transition:'background .1s'}}
+                                            onMouseEnter={e=>e.currentTarget.style.background='#f8f8f8'}
+                                            onMouseLeave={e=>e.currentTarget.style.background='#fff'}
+                                        >
+                                            <div style={{flex:1,display:'flex',flexDirection:'column',gap:'1px'}}>
+                                                <div style={{fontSize:'14px',fontWeight:800,color:'#111'}}>{formatRupiah(pending.total)}</div>
+                                                <div style={{fontSize:'12px',fontWeight:600,color:'#444'}}>
+                                                    {pending.items.length} barang • {new Date(pending.date || pending.savedAt).toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit'})}
                                                 </div>
-                                                <div className="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-sky-50 group-hover:text-sky-500 transition-colors flex-shrink-0"><Icon name="chevron-right" className="text-[10px]" /></div>
-                                            </button>
-                                        ))}
-                                    </div>
+                                                <div style={{fontSize:'12px',fontWeight:600,color:'#555'}}>{pending.cashierName || 'Kasir'}</div>
+                                            </div>
+                                            <div style={{color:'#118989',flexShrink:0,display:'flex',alignItems:'center'}}>
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                                            </div>
+                                        </button>
+                                    ))}
                                 </div>
                              )}
+                             </div>
 
-
-
-                            <button onClick={() => handleStartSession(cashierName)} className="group relative w-full aspect-square md:aspect-video rounded-3xl border-4 border-dashed border-sky-300 bg-sky-50/50 hover:bg-sky-100 hover:border-sky-400 transition-all flex flex-col items-center justify-center gap-4 active:scale-95"><div className="w-20 h-20 rounded-full bg-white text-sky-500 shadow-soft flex items-center justify-center text-4xl group-hover:scale-110 transition-transform"><Icon name="cart-plus" /></div><div className="text-center"><h2 className="text-2xl font-black text-slate-700 group-hover:text-sky-700">+ Penjualan Baru</h2><p className="text-sm text-slate-500 font-medium mt-1">Mulai sesi kasir di toko ini</p><p className="text-xs text-sky-600 font-bold mt-1">👤 {cashierName}</p></div></button>
+                             {/* ── TOMBOL + PENJUALAN (Farmacare style) ── */}
+                             <div style={{padding:'10px 8px 16px 8px', marginTop: (activeCarts.length > 0 || pendingCarts.length > 0) ? '0' : '4px'}}>
+                                 <button
+                                     onClick={() => handleStartSession(cashierName)}
+                                     style={{
+                                         width:'100%', border:'1.5px solid #b8d8d8', background:'#f0f8f8',
+                                         borderRadius:'10px', padding:'9px 0', display:'flex', alignItems:'center',
+                                         justifyContent:'center', gap:'7px', color:'#118989',
+                                         fontSize:'14.5px', fontWeight:700, fontFamily:"'Nunito',sans-serif",
+                                         cursor:'pointer', transition:'background .1s',
+                                     }}
+                                     onMouseEnter={e=>e.currentTarget.style.background='#e0f0f0'}
+                                     onMouseLeave={e=>e.currentTarget.style.background='#f0f8f8'}
+                                 >
+                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                                         <line x1="12" y1="5" x2="12" y2="19"/>
+                                         <line x1="5" y1="12" x2="19" y2="12"/>
+                                     </svg>
+                                     Penjualan Baru
+                                 </button>
+                             </div>
                         </div>
                         
                         {/* NEW: Modal Input Nama Kasir - Render sebagai overlay */}
@@ -7389,7 +7326,7 @@
                                         <Icon name="xmark" className="text-xl" />
                                     </button>
                                     <div className="text-center mb-6">
-                                        <div className="w-20 h-20 bg-sky-100 rounded-full flex items-center justify-center text-3xl mx-auto mb-4 text-sky-600">
+                                        <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl mx-auto mb-4" style={{background:'#e8f5f5',color:'#118989'}}>
                                             <Icon name="user-circle" />
                                         </div>
                                         <h3 className="text-2xl font-black text-slate-800">{`Halo, ${cashierName}!`}</h3>
@@ -7397,7 +7334,8 @@
                                     </div>
                                     <button 
                                         onClick={startCashierSession}
-                                        className="w-full py-4 bg-sky-600 text-white rounded-xl font-bold shadow-lg shadow-sky-100 flex items-center justify-center gap-2 hover:bg-sky-700 active:scale-95 transition-all text-lg"
+                                        className="w-full py-4 text-white rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all text-lg"
+                                        style={{background:'#118989'}}
                                     >
                                         <Icon name="rocket" /> Mulai Kasir
                                     </button>
@@ -7414,7 +7352,7 @@
                     <div className="flex-1 flex flex-col h-full min-h-0">
                         
                         {/* Tombol Kembali - paling atas */}
-                        <button onClick={handleBack} className="w-10 h-10 rounded-xl bg-white text-slate-400 hover:text-sky-600 hover:border-sky-300 border border-slate-200 flex items-center justify-center shadow-sm transition-colors mb-3" title="Kembali & Simpan Sementara"><Icon name="arrow-left" /></button>
+                        <button onClick={handleBack} className="w-10 h-10 rounded-xl bg-white text-slate-400 border border-slate-200 flex items-center justify-center shadow-sm transition-colors mb-3" style={{}} onMouseEnter={e=>{e.currentTarget.style.color='#118989';e.currentTarget.style.borderColor='#b8d8d8';}} onMouseLeave={e=>{e.currentTarget.style.color='';e.currentTarget.style.borderColor='';}} title="Kembali &amp; Simpan Sementara"><Icon name="arrow-left" /></button>
 
                         {/* OFFLINE MODE BANNER */}
                         {isOfflineMode && (
@@ -7432,8 +7370,8 @@
 
                         {/* Slim kasir indicator */}
                         <div className="flex items-center gap-2 mb-3 px-1">
-                            <div className="w-6 h-6 bg-sky-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm">{cashierName.charAt(0).toUpperCase()}</div>
-                            <span className="text-xs font-bold text-sky-700">{cashierName}</span>
+                            <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm" style={{background:'#118989'}}>{cashierName.charAt(0).toUpperCase()}</div>
+                            <span className="text-xs font-bold" style={{color:'#118989'}}>{cashierName}</span>
                             <span className="text-[10px] text-slate-400">• {currentProfile.name}</span>
                             {isOfflineMode && <span className="text-[10px] bg-amber-100 text-amber-600 font-bold px-1.5 py-0.5 rounded-full">🔌 Offline</span>}
                         </div>
@@ -7632,7 +7570,7 @@
                         <button onClick={() => { if(readOnly){showToast('Akses terbatas — hubungi owner','error');return;} setPaymentAmount(''); setPaymentMethod(''); setCartPembulatan(0); setCheckoutModal(true); }} disabled={cart.length === 0} className="w-full py-2.5 mb-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold shadow-sm active:scale-95 transition-all disabled:opacity-40 disabled:scale-100 flex items-center justify-center gap-2 text-sm">Bayar Sekarang</button>
 
                         <div className="relative mb-4">
-                        <div className="flex items-center gap-3"><div className="relative group flex-1"><input autoFocus type="text" placeholder="Ketik nama barang disini..." className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-200 shadow-soft focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-all font-bold text-base text-slate-700 placeholder:font-normal placeholder:text-slate-400" value={search} onChange={e => setSearch(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-base group-focus-within:text-sky-500" /></div></div>
+                        <div className="flex items-center gap-3"><div className="relative group flex-1"><input autoFocus type="text" placeholder="Ketik nama barang disini..." className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-200 shadow-soft outline-none transition-all font-bold text-base text-slate-700 placeholder:font-normal placeholder:text-slate-400" style={{'--tw-ring-color':'#118989'}} onFocus={e=>{e.currentTarget.style.borderColor='#118989';e.currentTarget.style.boxShadow='0 0 0 2px rgba(17,137,137,0.15)';}} onBlur={e=>{e.currentTarget.style.borderColor='';e.currentTarget.style.boxShadow='';}} value={search} onChange={e => setSearch(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-base group-focus-within:text-teal-500" /></div></div>
                         {/* Tombol R/ Resep - di bawah search, akan tertutup dropdown */}
                         <div className="flex justify-start mt-2" style={{position:'relative',zIndex:1}}>
                             <button onClick={() => { setShowRacikanPage(true); setRacikanSearch(''); }} className="flex-shrink-0 px-4 py-2.5 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-black text-sm shadow-lg active:scale-95 transition-all flex items-center gap-1.5" title="Pelayanan Racikan / Resep"><span className="text-base leading-none">R/</span></button>
@@ -7908,7 +7846,7 @@
                                     <div className="space-y-1"><label className="text-[10px] font-bold text-slate-400 uppercase">Atau Ketik Manual</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">Rp</span><input autoFocus type="number" className="w-full pl-10 pr-3 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-sky-500 outline-none font-bold text-lg text-slate-800" placeholder="0" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} /></div></div>
                                     <div className={`mt-3 flex justify-between text-sm transition-colors ${change < 0 ? 'text-red-500' : 'text-green-600'}`}><span className="font-medium">Kembalian</span><span className="font-bold">{change < 0 ? '-' : formatRupiah(change)}</span></div>
                                 </div>
-                                <button onClick={handleCheckout} disabled={change < 0 || isProcessing} className="w-full py-3.5 bg-sky-600 text-white rounded-xl font-bold shadow-lg disabled:opacity-50 disabled:bg-slate-400 flex justify-center items-center gap-2">{isProcessing ? <div className="typing-dot bg-white"></div> : <><Icon name="wallet" /> BAYAR</>}</button>
+                                <button onClick={handleCheckout} disabled={change < 0 || isProcessing} className="w-full py-3.5 text-white rounded-xl font-bold shadow-lg disabled:opacity-50 disabled:bg-slate-400 flex justify-center items-center gap-2" style={{background: change >= 0 && !isProcessing ? '#118989' : undefined}}>{isProcessing ? <div className="typing-dot bg-white"></div> : <><Icon name="wallet" /> BAYAR</>}</button>
                             </div>
                         ) : paymentMethod === 'qris' ? (
                             <div className="text-center">
@@ -12188,18 +12126,6 @@
 
             return (
                 <div className="auth-bg flex items-center justify-center min-h-screen p-4">
-                    {/* Orbs */}
-                    <div className="auth-orb" style={{width:'400px',height:'400px',background:'rgba(14,165,233,0.15)',top:'-100px',left:'-100px'}}></div>
-                    <div className="auth-orb" style={{width:'300px',height:'300px',background:'rgba(250,204,21,0.1)',bottom:'50px',right:'-80px'}}></div>
-                    <div className="auth-orb" style={{width:'200px',height:'200px',background:'rgba(34,197,94,0.1)',top:'40%',right:'5%'}}></div>
-                    
-                    {/* Stars */}
-                    {[...Array(8)].map((_,i) => (
-                        <div key={i} className="auth-floating-star text-yellow-300" style={{
-                            top: Math.random()*80+'%', left: Math.random()*95+'%',
-                            fontSize: (Math.random()*8+6)+'px', animationDelay: i*0.5+'s', opacity:0.4
-                        }}><Icon name="star" /></div>
-                    ))}
 
                     <div className="auth-card auth-fade-in w-full max-w-md relative z-10">
                         {/* Header */}
@@ -15110,7 +15036,7 @@
             const visibleMenuItems = menuItems.filter(m => m.enabled);
 
             return (
-                <div className={`min-h-screen flex flex-col md:flex-row bg-sky-50/50 transition-colors duration-500 ${activeStoreId === 'all_stores' ? 'theme-all-stores' : ''}`}>
+                <div className={`min-h-screen flex flex-col md:flex-row bg-white transition-colors duration-500 ${activeStoreId === 'all_stores' ? 'theme-all-stores' : ''}`}>
                     <RamadhanDecor /> <Toast show={toast.show} message={toast.message} type={toast.type} /> <ExpiryBanner items={expiryAlertItems} thresholdDays={(settingsData.expiryNotifMonths || 3) * 30} durationMs={(settingsData.expiryNotifSeconds || 3) * 1000} /> {isSidebarOpen && (<div className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm fade-in" onClick={() => setIsSidebarOpen(false)}></div>)}
                     
                     {/* HIDDEN RECEIPT CONTAINER (UPDATED FOR DYNAMIC STORE) */}
@@ -15400,23 +15326,65 @@
                         </div>
                     </aside>
                     <main className="flex-1 md:ml-0 p-4 md:p-8 max-w-7xl mx-auto w-full mb-0">
-                        <div className="md:hidden mb-6 flex items-center justify-between gap-4 relative z-30">
-                            <div className="flex items-center gap-2">
-                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white ${activeStoreId === 'all_stores' ? 'bg-indigo-600' : 'bg-sky-600'} shadow-md`}><Icon name="shop" /></div>
-                                <h1 className="font-bold text-slate-800 text-lg">{currentProfile.name}</h1>
+                        {/* ── FARMACARE-STYLE TOPBAR (mobile only) ── */}
+                        <div className="md:hidden -mx-4 -mt-4 mb-5 flex items-center bg-white border-b border-slate-200 px-3.5 gap-2.5 sticky top-0 z-30" style={{minHeight:'46px'}}>
+                            {/* Hamburger */}
+                            <button onClick={() => setIsSidebarOpen(true)} className="flex items-center justify-center p-1.5 rounded-lg active:bg-slate-100 transition-colors flex-shrink-0">
+                                <svg width="18" height="13" viewBox="0 0 18 13" fill="none">
+                                    <rect width="18" height="2" rx="1" fill="#118989"/>
+                                    <rect y="5.5" width="18" height="2" rx="1" fill="#118989"/>
+                                    <rect y="11" width="18" height="2" rx="1" fill="#118989"/>
+                                </svg>
+                            </button>
+                            {/* Brand */}
+                            <div className="flex-1 flex flex-col gap-0.5 cursor-pointer select-none" onClick={() => setShowStoreMenu(!showStoreMenu)}>
+                                <div className="flex items-center gap-1 font-extrabold leading-tight" style={{fontSize:'17px', color:'#118989'}}>
+                                    {currentProfile.name}
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+                                </div>
+                                <div className="text-slate-500 font-semibold leading-none" style={{fontSize:'12.5px'}}>
+                                    {authSession?.namaLengkap || authSession?.username || 'Kasir'} — {isOwner ? 'Pemilik Toko' : (authSession?.jabatan || 'Karyawan')}
+                                </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                {/* Bell - mobile header */}
-                                <button onClick={handleOpenNotif} className="relative bg-white/90 backdrop-blur-md w-10 h-10 rounded-xl text-slate-600 shadow-sm border border-slate-200 active:scale-95 transition-all flex items-center justify-center">
-                                    <Icon name="bell" className="text-base" />
-                                    {unreadCount > 0 && (
-                                        <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center leading-none shadow animate-pulse">
-                                            {unreadCount > 9 ? '9+' : unreadCount}
-                                        </span>
-                                    )}
-                                </button>
-                                <button onClick={() => setIsSidebarOpen(true)} className="bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-xl text-slate-700 font-bold text-sm shadow-sm border border-slate-200 active:scale-95 transition-all flex items-center gap-2"><Icon name="bars" className="text-sky-600" /> Menu</button>
-                            </div>
+                            {/* Help btn */}
+                            <button className="flex items-center justify-center flex-shrink-0 bg-white active:bg-slate-50 transition-colors" style={{width:'34px',height:'34px',borderRadius:'8px',border:'1.5px solid #c0c0c0'}}>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#118989" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                                    <circle cx="12" cy="17" r=".5" fill="#118989"/>
+                                </svg>
+                            </button>
+                            {/* Bell */}
+                            <button onClick={handleOpenNotif} className="relative flex items-center justify-center flex-shrink-0 bg-white active:bg-slate-50 transition-colors" style={{width:'34px',height:'34px',borderRadius:'8px',border:'1.5px solid #c0c0c0'}}>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#118989" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                                </svg>
+                                {unreadCount > 0 && (
+                                    <span className="absolute bg-red-500 text-white font-black flex items-center justify-center" style={{top:'-5px',right:'-5px',fontSize:'10px',borderRadius:'99px',minWidth:'19px',height:'19px',padding:'0 4px',border:'2px solid #efefef'}}>
+                                        {unreadCount > 9 ? '9+' : unreadCount}
+                                    </span>
+                                )}
+                            </button>
+                            {/* Store switcher dropdown (triggered by brand tap) */}
+                            {showStoreMenu && (
+                                <div className="absolute top-full left-0 right-0 mt-0 bg-white shadow-xl border-t border-slate-100 z-[60] fade-in">
+                                    <div className="p-2 border-b border-slate-50 bg-slate-50/50"><span className="text-[10px] font-bold text-slate-500 uppercase px-2">Pilih Profil Toko</span></div>
+                                    <div className="max-h-48 overflow-y-auto">
+                                        {visibleStoreProfiles.map(profile => (
+                                            <button key={profile.id} onClick={() => { handleSwitchStore(profile.id); setShowStoreMenu(false); }} className={`w-full text-left px-4 py-3 text-sm font-bold flex items-center justify-between hover:bg-sky-50 transition-colors ${activeStoreId === profile.id ? 'text-sky-600 bg-sky-50' : 'text-slate-700'}`}>
+                                                <span className="truncate">{profile.name}</span>{activeStoreId === profile.id && <Icon name="check" className="text-xs" />}
+                                            </button>
+                                        ))}
+                                        {isOwner && (visibleStoreProfiles.length > 1) && (
+                                            <button onClick={() => { handleSwitchStore('all_stores'); setShowStoreMenu(false); }} className={`w-full text-left px-4 py-3 text-sm font-bold flex items-center justify-between hover:bg-indigo-50 transition-colors border-t border-slate-100 ${activeStoreId === 'all_stores' ? 'text-indigo-600 bg-indigo-50' : 'text-slate-700'}`}>
+                                                <span className="truncate">Semua Toko (Gabungan)</span>{activeStoreId === 'all_stores' && <Icon name="check" className="text-xs" />}
+                                            </button>
+                                        )}
+                                    </div>
+                                    <button onClick={() => { setActiveTab('settings'); setShowStoreMenu(false); }} className="w-full text-left px-4 py-2 text-[10px] font-bold text-slate-400 hover:bg-slate-50 border-t border-slate-100">+ Kelola Toko di Pengaturan</button>
+                                </div>
+                            )}
                         </div>
                         {/* Notification Panel - Tabbed Modal */}
                         {showNotifPanel && (
