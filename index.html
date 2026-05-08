@@ -7295,6 +7295,26 @@
                              )}
                              </div>
 
+                             {/* ── EMPTY STATE: Belum ada penjualan ── */}
+                             {activeCarts.length === 0 && pendingCarts.length === 0 && (
+                                 <div style={{
+                                     margin: '12px 8px 4px 8px',
+                                     border: '1.5px solid #e8e8e8',
+                                     borderRadius: '10px',
+                                     padding: '28px 16px',
+                                     textAlign: 'center',
+                                     background: '#fff',
+                                 }}>
+                                     <p style={{
+                                         fontSize: '14px',
+                                         fontWeight: 700,
+                                         color: '#111',
+                                         margin: 0,
+                                         fontFamily: "'Nunito', sans-serif",
+                                     }}>Belum ada penjualan</p>
+                                 </div>
+                             )}
+
                              {/* ── TOMBOL + PENJUALAN (Farmacare style) ── */}
                              <div style={{padding:'10px 8px 16px 8px', marginTop: (activeCarts.length > 0 || pendingCarts.length > 0) ? '0' : '4px'}}>
                                  <button
