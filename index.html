@@ -15152,7 +15152,6 @@
                                                 >
                                                     <span style={{flexShrink:0,color: (isKasirGroupActive && !kasirDropdownOpen) ? '#19737c' : '#fff',display:'flex',alignItems:'center',width:'18px',height:'18px'}}>
                                                         <Icon name="cash-register" className="text-base" />
-                                                        {menu.badge > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">{menu.badge > 9 ? '9+' : menu.badge}</span>}
                                                     </span>
                                                     <span style={{flex:1}}>Kasir</span>
                                                     <span
@@ -15173,6 +15172,9 @@
                                                                 style={{display:'flex',alignItems:'center',width:'100%',padding:'7px 12px 7px 36px',color: activeTab === sub.id ? '#19737c' : 'rgba(255,255,255,0.82)',fontSize:'13.5px',fontWeight:600,cursor:'pointer',borderRadius:'8px',background: activeTab === sub.id ? '#fff' : 'transparent',border:'none',textAlign:'left'}}
                                                             >
                                                                 <span className="flex-1 text-left">{sub.label}</span>
+                                                                {sub.id === 'cashier' && menu.badge > 0 && (
+                                                                    <span className="w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse ml-1" style={{flexShrink:0}}>{menu.badge > 9 ? '9+' : menu.badge}</span>
+                                                                )}
                                                             </button>
                                                         ))}
                                                     </div>
