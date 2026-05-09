@@ -7128,6 +7128,43 @@
                     batch.set(docRef, newTransaction);
                     await batch.commit();
                     
+                    // ── BARU: Update physicalMap di sesi Stock Opname aktif ──────────
+                    // Jika sedang ada sesi opname, kurangi physicalMap sesuai barang terjual
+                    try {
+                        const soCol = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname');
+                        const soQ = window.query(soCol, window.where('status', '==', 'open'), window.where('profileId', '==', currentProfile.id || 'default'));
+                        const soSnap = await window.getDocs(soQ);
+                        if (!soSnap.empty) {
+                            const soDocRef = soSnap.docs[0].ref;
+                            const soData = soSnap.docs[0].data();
+                            const physMap = soData.physicalMap || {};
+                            const soUpdate = {};
+                            cart.forEach(item => {
+                                if (item.isRacikanGroup) {
+                                    (item.racikanItems || []).forEach(ri => {
+                                        // Hanya kurangi jika item ini sudah dicatat di opname
+                                        if (physMap[ri.id] !== undefined) {
+                                            soUpdate[`physicalMap.${ri.id}`] = window.increment(-ri.qty);
+                                        }
+                                    });
+                                } else {
+                                    if (physMap[item.id] !== undefined) {
+                                        const deductQty = item.cartQty * (item.packageQtyPerUnit || 1);
+                                        soUpdate[`physicalMap.${item.id}`] = window.increment(-deductQty);
+                                    }
+                                }
+                            });
+                            if (Object.keys(soUpdate).length > 0) {
+                                soUpdate.updatedAt = window.serverTimestamp();
+                                await window.updateDoc(soDocRef, soUpdate);
+                            }
+                        }
+                    } catch(soErr) {
+                        // Jangan gagalkan transaksi karena error opname
+                        console.warn('SO physicalMap update skipped:', soErr);
+                    }
+                    // ─────────────────────────────────────────────────────────────────
+                    
                     // NEW: Hapus active cart setelah checkout berhasil
                     if (activeCartId) {
                         try {
@@ -11335,6 +11372,10 @@
             const [showCancelModal, setShowCancelModal] = useState(false);
             const [showEmployeeCancelInfo, setShowEmployeeCancelInfo] = useState(false);
             const [historyDetail, setHistoryDetail] = useState(null);
+            // ── BARU: live-save & sinkronisasi kasir ──────────────────────────
+            const [soSaveStatus, setSoSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
+            const focusedItemRef = React.useRef(null);   // item sedang diketik user
+            const soDebounceRef  = React.useRef({});     // debounce per-item
 
             const profileId = currentProfile?.id || 'default';
             const getCol = () => window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname');
@@ -11347,23 +11388,27 @@
                 return () => unsub();
             }, []);
 
-            const initializedSessionRef = React.useRef(null);
-
             useEffect(() => {
                 const active = sessions.find(s => s.status === 'open' && s.profileId === profileId);
                 if (active) {
                     setActiveSession(active);
                     setSessionId(active.id);
-                    // Hanya load physicalCounts saat pertama kali sesi ditemukan,
-                    // supaya snapshot berikutnya tidak overwrite input user
-                    if (initializedSessionRef.current !== active.id) {
-                        initializedSessionRef.current = active.id;
-                        const counts = {};
-                        (active.entries || []).forEach(e => { counts[e.itemId] = e.physicalQty; });
-                        setPhysicalCounts(counts);
-                    }
+                    // physicalMap = sumber kebenaran di Firestore (diupdate kasir & opname user)
+                    // Sync ke state, tapi JANGAN overwrite item yang sedang diketik user
+                    const physMap = active.physicalMap || {};
+                    setPhysicalCounts(prev => {
+                        const focused = focusedItemRef.current;
+                        const merged = { ...prev };
+                        Object.entries(physMap).forEach(([id, qty]) => {
+                            if (id !== focused) {
+                                // Update dari Firestore (misal: kasir jual → qty turun)
+                                merged[id] = qty !== undefined && qty !== null ? qty : prev[id];
+                            }
+                        });
+                        // Jika ada item di prev yang tidak ada di physMap, pertahankan (baru diketik)
+                        return merged;
+                    });
                 } else {
-                    initializedSessionRef.current = null;
                     setActiveSession(null);
                     setSessionId(null);
                     setPhysicalCounts({});
@@ -11403,6 +11448,25 @@
 
             const handleCountChange = (itemId, val) => {
                 setPhysicalCounts(prev => ({ ...prev, [itemId]: val === '' ? undefined : val }));
+                if (!sessionId) return;
+                // ── Live-save: update physicalMap per item di Firestore (debounce 600ms) ──
+                if (val !== '' && val !== undefined) {
+                    setSoSaveStatus('saving');
+                    clearTimeout(soDebounceRef.current[itemId]);
+                    soDebounceRef.current[itemId] = setTimeout(async () => {
+                        try {
+                            await window.updateDoc(
+                                window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname', sessionId),
+                                { [`physicalMap.${itemId}`]: Number(val), updatedAt: window.serverTimestamp() }
+                            );
+                            setSoSaveStatus('saved');
+                            setTimeout(() => setSoSaveStatus('idle'), 2000);
+                        } catch(e) {
+                            console.error('SO live-save error', e);
+                            setSoSaveStatus('idle');
+                        }
+                    }, 600);
+                }
             };
 
             const saveProgress = React.useCallback(async (counts, sid) => {
@@ -11414,14 +11478,15 @@
                         return { itemId, name: item?.name || '?', systemQty: Number(item?.qty || 0), physicalQty: Number(physicalQty), selisih: Number(physicalQty) - Number(item?.qty || 0), price: Number(item?.price || 0) };
                     });
                 try {
+                    // entries = untuk history/export, physicalMap diupdate per-item oleh handleCountChange & kasir
                     await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname', sid), { entries, updatedAt: window.serverTimestamp() });
                 } catch (e) { console.error('Auto-save SO error', e); }
             }, [items]);
 
-            // Auto-save dengan debounce 1.5 detik setiap physicalCounts berubah
+            // Auto-save entries (untuk history/export) — debounce 1.5 detik
             useEffect(() => {
                 if (!sessionId || Object.keys(physicalCounts).length === 0) return;
-                const timer = setTimeout(() => { saveProgress(physicalCounts, sessionId); }, 0);
+                const timer = setTimeout(() => { saveProgress(physicalCounts, sessionId); }, 1500);
                 return () => clearTimeout(timer);
             }, [physicalCounts, sessionId]);
 
@@ -11734,7 +11799,20 @@
                                     <div className="bg-sky-500 h-3 rounded-full transition-all duration-500" style={{ width: `${stats.total > 0 ? (stats.counted / stats.total) * 100 : 0}%` }}></div>
                                 </div>
                                 <div className="flex items-center justify-between mt-3 gap-2 flex-wrap">
-                                    <p className="text-[10px] text-slate-400">Sesi dimulai: {formatDate(activeSession.createdAt)}</p>
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-[10px] text-slate-400">Sesi dimulai: {formatDate(activeSession.createdAt)}</p>
+                                        {/* ── Indikator Live-Save ── */}
+                                        {soSaveStatus === 'saving' && (
+                                            <span style={{display:'inline-flex',alignItems:'center',gap:'4px',fontSize:'9px',fontWeight:700,color:'#0284c7',background:'#e0f2fe',borderRadius:'99px',padding:'2px 8px'}}>
+                                                <i className="fa-solid fa-circle-notch fa-spin" style={{fontSize:'8px'}}></i> Menyimpan...
+                                            </span>
+                                        )}
+                                        {soSaveStatus === 'saved' && (
+                                            <span style={{display:'inline-flex',alignItems:'center',gap:'4px',fontSize:'9px',fontWeight:700,color:'#059669',background:'#d1fae5',borderRadius:'99px',padding:'2px 8px'}}>
+                                                <i className="fa-solid fa-check" style={{fontSize:'8px'}}></i> Tersimpan
+                                            </span>
+                                        )}
+                                    </div>
                                     <div className="flex gap-2">
                                         <button
                                             onClick={() => {
@@ -11764,6 +11842,16 @@
                                     {[['all','Semua'],['belum','Belum'],['selisih','Selisih'],['ok','Sesuai']].map(([v,l]) => (
                                         <button key={v} onClick={() => setFilterStatus(v)} className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${filterStatus === v ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>{l}</button>
                                     ))}
+                                </div>
+                            </div>
+                            {/* ── Banner: Opname Sambil Buka Toko ── */}
+                            <div style={{background:'linear-gradient(90deg,#f0fdf4,#e0f2fe)',border:'1px solid #bbf7d0',borderRadius:'14px',padding:'10px 14px',display:'flex',alignItems:'center',gap:'10px'}}>
+                                <div style={{width:'32px',height:'32px',background:'#dcfce7',borderRadius:'10px',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                                    <i className="fa-solid fa-store" style={{color:'#16a34a',fontSize:'14px'}}></i>
+                                </div>
+                                <div>
+                                    <p style={{fontSize:'11px',fontWeight:800,color:'#166534',margin:0}}>Opname Sambil Buka Toko ✓</p>
+                                    <p style={{fontSize:'10px',color:'#4ade80',fontWeight:600,margin:'2px 0 0 0',color:'#15803d'}}>Stok fisik tersimpan otomatis saat diisi · Transaksi kasir akan otomatis mengurangi stok fisik</p>
                                 </div>
                             </div>
 
@@ -11809,6 +11897,8 @@
                                                             <input type="number" min="0"
                                                                 value={physical !== undefined ? physical : ''}
                                                                 onChange={e => handleCountChange(item.id, e.target.value)}
+                                                                onFocus={() => { focusedItemRef.current = item.id; }}
+                                                                onBlur={() => { focusedItemRef.current = null; }}
                                                                 placeholder="—"
                                                                 style={{
                                                                     width:'46px', textAlign:'center', fontSize:'11px', fontWeight:700,
