@@ -9371,7 +9371,7 @@
                         <div className="flex flex-col gap-0 mb-4">
                             <StatPopup id="transaksi" title="Total transaksi kasir" hasIcon={true}>
                                 <div className="text-2xl font-black text-slate-800 mt-1">{formatRupiah(stats.netSales)}</div>
-                                <p className="text-xs text-slate-400 mt-0.5">Dari {stats.grossCount} transaksi</p>
+                                <p className="text-xs text-slate-400 mt-0.5">Dari {stats.grossCount - stats.returnTxCount} transaksi</p>
                             </StatPopup>
                             <StatPopup id="penjualan" title="Total penjualan kasir" hasIcon={true}>
                                 <div className="text-2xl font-black text-slate-800 mt-1">{formatRupiah(stats.grossSales)}</div>
