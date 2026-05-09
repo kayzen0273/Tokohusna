@@ -9060,6 +9060,38 @@
                     if (totalReturnedCount === totalItemsCount) newStatus = 'returned'; else if (totalReturnedCount > 0) newStatus = 'partial';
                     batch.update(txRef, { items: updatedItems, status: newStatus, returnedAt: window.serverTimestamp() });
                     await batch.commit();
+
+                    // ── BARU: Update physicalMap di sesi Stock Opname aktif (retur = stok fisik naik) ──
+                    try {
+                        const soCol = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname');
+                        const soQ = window.query(soCol, window.where('status', '==', 'open'), window.where('profileId', '==', storeIdToReturn));
+                        const soSnap = await window.getDocs(soQ);
+                        if (!soSnap.empty) {
+                            const soDocRef = soSnap.docs[0].ref;
+                            const soData = soSnap.docs[0].data();
+                            const physMap = soData.physicalMap || {};
+                            const soUpdate = {};
+                            if (item.isRacikanGroup) {
+                                (item.racikanItems || []).forEach(ri => {
+                                    if (physMap[ri.id] !== undefined) {
+                                        soUpdate[`physicalMap.${ri.id}`] = window.increment(ri.qty * qtyToRetur);
+                                    }
+                                });
+                            } else {
+                                if (physMap[item.id] !== undefined) {
+                                    const returStockQty = qtyToRetur * (item.packageQtyPerUnit || 1);
+                                    soUpdate[`physicalMap.${item.id}`] = window.increment(returStockQty);
+                                }
+                            }
+                            if (Object.keys(soUpdate).length > 0) {
+                                soUpdate.updatedAt = window.serverTimestamp();
+                                await window.updateDoc(soDocRef, soUpdate);
+                            }
+                        }
+                    } catch(soErr) {
+                        console.warn('SO physicalMap retur update skipped:', soErr);
+                    }
+                    // ─────────────────────────────────────────────────────────────────
                     const label = item.isRacikanGroup ? 'Racikan' : `${qtyToRetur} ${item.selectedUnit || item.unit}${item.packageQtyPerUnit > 1 ? ` (${qtyToRetur * item.packageQtyPerUnit} ${item.unit} kembali ke stok)` : ''}`;
                     showToast(`Berhasil meretur ${label} ke Stok Toko`, "success");
                     setReturModal({ show: false, tx: null, item: null, index: -1 }); setSelectedTx(null);
