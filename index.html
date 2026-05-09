@@ -9332,14 +9332,69 @@
                         )}
                         </div>
                     </header>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="flex items-center gap-1 mb-1 border-b-2 border-dashed border-slate-200 w-fit pb-0.5"><h4 className="font-bold text-slate-800 text-sm">Total transaksi kasir</h4><Icon name="circle-question" className="text-[10px] text-sky-500 mb-2" /></div><div className="text-2xl font-black text-slate-800 mt-2">{formatRupiah(stats.netSales)}</div><p className="text-xs text-slate-400 mt-1">Net setelah retur</p></div>
-                        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="flex items-center gap-1 mb-1 border-b-2 border-dashed border-slate-200 w-fit pb-0.5"><h4 className="font-bold text-slate-800 text-sm">Total penjualan kasir</h4><Icon name="circle-question" className="text-[10px] text-sky-500 mb-2" /></div><div className="text-2xl font-black text-slate-800 mt-2">{formatRupiah(stats.grossSales)}</div><p className="text-xs text-slate-400 mt-1">Dari {stats.grossCount} transaksi</p></div>
-                        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="flex items-center gap-1 mb-1 border-b-2 border-dashed border-slate-200 w-fit pb-0.5"><h4 className="font-bold text-slate-800 text-sm">Total retur kasir</h4><Icon name="circle-question" className="text-[10px] text-sky-500 mb-2" /></div><div className="text-2xl font-black text-red-600 mt-2">-{formatRupiah(stats.returnsValue).replace('Rp','Rp ')}</div><p className="text-xs text-slate-400 mt-1">Dari {stats.returnTxCount} transaksi bermasalah</p></div>
-                        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><h4 className="font-bold text-slate-800 text-sm mb-1">Rata-rata penjualan kasir</h4><div className="text-2xl font-black text-slate-800 mt-2">{formatRupiah(stats.avgSale)}</div></div>
-                        <div className="bg-teal-50 p-4 rounded-xl border border-teal-100 shadow-sm"><div className="flex items-center gap-1 mb-1 border-b-2 border-dashed border-teal-200 w-fit pb-0.5"><h4 className="font-bold text-teal-800 text-sm">Total uang R/</h4></div><div className="text-2xl font-black text-teal-700 mt-2">{formatRupiah(stats.totalUangR)}</div><p className="text-xs text-teal-500 mt-1">Biaya racikan / resep</p></div>
-                        <div className={`p-4 rounded-xl border shadow-sm ${stats.totalPembulatan >= 0 ? 'bg-amber-50 border-amber-100' : 'bg-red-50 border-red-100'}`}><div className="flex items-center gap-1 mb-1 border-b-2 border-dashed border-amber-200 w-fit pb-0.5"><h4 className={`font-bold text-sm ${stats.totalPembulatan >= 0 ? 'text-amber-800' : 'text-red-800'}`}>Total pembulatan kasir</h4></div><div className={`text-2xl font-black mt-2 ${stats.totalPembulatan >= 0 ? 'text-amber-700' : 'text-red-600'}`}>{stats.totalPembulatan >= 0 ? '+' : ''}{formatRupiah(stats.totalPembulatan)}</div><p className={`text-xs mt-1 ${stats.totalPembulatan >= 0 ? 'text-amber-500' : 'text-red-400'}`}>{stats.totalPembulatan >= 0 ? 'Lebih dari harga asli' : 'Kurang dari harga asli'}</p></div>
-                    </div>
+                    {(() => {
+                        const [statInfoOpen, setStatInfoOpen] = React.useState(null);
+                        const statInfoData = {
+                            'transaksi': { title: 'Total transaksi kasir', desc: 'Total yang diterima dari seluruh transaksi di kasir termasuk penjualan barang, uang R/, pembulatan, dan returnya.\n\nTidak termasuk transaksi yang dibatalkan.' },
+                            'penjualan': { title: 'Total penjualan kasir', desc: 'Jumlah kotor seluruh transaksi penjualan kasir sebelum dikurangi retur.\n\nDihitung dari semua transaksi yang berhasil diselesaikan.' },
+                            'retur': { title: 'Total retur kasir', desc: 'Total nilai transaksi yang dikembalikan atau diretur.\n\nNilai ini akan mengurangi total transaksi kasir bersih.' },
+                            'rata': { title: 'Rata-rata penjualan kasir', desc: 'Nilai rata-rata per transaksi penjualan.\n\nDihitung dari total penjualan dibagi jumlah transaksi.' },
+                            'uangr': { title: 'Total uang R/', desc: 'Total biaya racikan atau resep dokter.\n\nBiaya ini dihitung terpisah dari harga obat untuk keperluan laporan apotek.' },
+                            'pembulatan': { title: 'Total pembulatan kasir', desc: 'Selisih total akibat pembulatan harga saat transaksi.\n\nNilai positif berarti kasir menerima lebih, negatif berarti kurang dari harga asli.' },
+                        };
+                        const StatPopup = ({ id, title, hasIcon, children }) => (
+                            <div className="py-3 relative">
+                                {statInfoOpen === id && (
+                                    <div className="fixed inset-0" style={{zIndex:49}} onClick={() => setStatInfoOpen(null)} />
+                                )}
+                                <button onClick={() => setStatInfoOpen(statInfoOpen === id ? null : id)} className="flex items-center gap-1 mb-1 cursor-pointer group text-left">
+                                    <h4 className="font-bold text-slate-800 text-sm border-b border-dashed border-slate-400 group-hover:border-sky-400 group-hover:text-sky-700 transition-colors">{title}</h4>
+                                    {hasIcon && <Icon name="circle-question" className="text-[10px] text-sky-500 mb-1" />}
+                                </button>
+                                {statInfoOpen === id && (
+                                    <div className="absolute left-0 bg-white rounded-2xl shadow-xl border border-slate-100 p-4 w-72 fade-in" style={{zIndex:50, top:'36px'}}>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="w-7 h-7 rounded-full bg-sky-50 border border-sky-100 flex items-center justify-center flex-shrink-0">
+                                                <Icon name="circle-info" className="text-sky-500 text-xs" />
+                                            </div>
+                                            <span className="font-black text-slate-800 text-sm">{statInfoData[id]?.title}</span>
+                                        </div>
+                                        {statInfoData[id]?.desc.split('\n\n').map((para, i) => (
+                                            <p key={i} className={`text-sm text-slate-600 leading-relaxed ${i > 0 ? 'mt-2' : ''}`}>{para}</p>
+                                        ))}
+                                    </div>
+                                )}
+                                {children}
+                            </div>
+                        );
+                        return (
+                        <div className="flex flex-col gap-0 mb-4">
+                            <StatPopup id="transaksi" title="Total transaksi kasir" hasIcon={true}>
+                                <div className="text-2xl font-black text-slate-800 mt-1">{formatRupiah(stats.netSales)}</div>
+                                <p className="text-xs text-slate-400 mt-0.5">Net setelah retur</p>
+                            </StatPopup>
+                            <StatPopup id="penjualan" title="Total penjualan kasir" hasIcon={true}>
+                                <div className="text-2xl font-black text-slate-800 mt-1">{formatRupiah(stats.grossSales)}</div>
+                                <p className="text-xs text-slate-400 mt-0.5">Dari {stats.grossCount} transaksi</p>
+                            </StatPopup>
+                            <StatPopup id="retur" title="Total retur kasir" hasIcon={true}>
+                                <div className="text-2xl font-black text-red-600 mt-1">-{formatRupiah(stats.returnsValue).replace('Rp','Rp ')}</div>
+                                <p className="text-xs text-slate-400 mt-0.5">Dari {stats.returnTxCount} transaksi bermasalah</p>
+                            </StatPopup>
+                            <StatPopup id="rata" title="Rata-rata penjualan kasir" hasIcon={false}>
+                                <div className="text-2xl font-black text-slate-800 mt-1">{formatRupiah(stats.avgSale)}</div>
+                            </StatPopup>
+                            <StatPopup id="uangr" title="Total uang R/" hasIcon={true}>
+                                <div className="text-2xl font-black text-teal-700 mt-1">{formatRupiah(stats.totalUangR)}</div>
+                                <p className="text-xs text-slate-400 mt-0.5">Biaya racikan / resep</p>
+                            </StatPopup>
+                            <StatPopup id="pembulatan" title="Total pembulatan kasir" hasIcon={true}>
+                                <div className={`text-2xl font-black mt-1 ${stats.totalPembulatan >= 0 ? 'text-amber-700' : 'text-red-600'}`}>{stats.totalPembulatan >= 0 ? '+' : ''}{formatRupiah(stats.totalPembulatan)}</div>
+                                <p className="text-xs text-slate-400 mt-0.5">{stats.totalPembulatan >= 0 ? 'Lebih dari harga asli' : 'Kurang dari harga asli'}</p>
+                            </StatPopup>
+                        </div>
+                        );
+                    })()}
                     <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm mb-4 space-y-3">
                          <div className="relative"><input type="text" placeholder="Cari barang, pasien, dokter..." className="w-full pl-10 pr-9 py-2.5 rounded-lg border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none text-sm font-medium" value={historySearchInput} onChange={(e) => { setHistorySearchInput(e.target.value); setHistorySearch(e.target.value); }} /><Icon name="magnifying-glass" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />{historySearchInput && (<button onClick={() => { setHistorySearchInput(''); setHistorySearch(''); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><Icon name="xmark" className="text-sm" /></button>)}</div>
                         <div className="flex gap-2 flex-wrap items-center">
