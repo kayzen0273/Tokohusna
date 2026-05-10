@@ -3686,7 +3686,7 @@
         };
 
         // --- PURCHASE VIEW ---
-        const PurchaseView = ({ user, showToast, items, currentProfile, settings, readOnly }) => {
+        const PurchaseView = ({ user, showToast, items, currentProfile, settings, readOnly, authSession, defaultOpenPurchaseId, onClearPendingPurchase, onBackFromDetail }) => {
             const [purchases, setPurchases] = useState([]);
             const [suppliers, setSuppliers] = useState([]);
             const [loading, setLoading] = useState(true);
@@ -4039,6 +4039,29 @@
             ).slice(0, 10);
 
             // Filter purchases by store
+            // Track apakah detail dibuka dari riwayat stok
+            const [openedFromRiwayat, setOpenedFromRiwayat] = useState(false);
+            const handleCloseDetail = () => {
+                if (openedFromRiwayat && onBackFromDetail) {
+                    setOpenedFromRiwayat(false);
+                    setDetailModalOpen(false);
+                    onBackFromDetail();
+                } else {
+                    setDetailModalOpen(false);
+                }
+            };
+
+            // Auto-open faktur ketika navigasi dari riwayat stok
+            useEffect(() => {
+                if (!defaultOpenPurchaseId || purchases.length === 0) return;
+                const target = purchases.find(p => p.id === defaultOpenPurchaseId);
+                if (target) {
+                    handleOpenDetail(target);
+                    setOpenedFromRiwayat(true);
+                    onClearPendingPurchase && onClearPendingPurchase();
+                }
+            }, [defaultOpenPurchaseId, purchases]);
+
             const storePurchases = purchases.filter(p => {
                 if (currentProfile.id === 'all_stores') return true;
                 if (!p.storeId) return currentProfile.id === 'default'; // backward compat: data lama tanpa storeId → default
@@ -4191,7 +4214,11 @@
                         isConsignment: invoiceData.isConsignment || false,
                         items: finalItems.map(item => ({ id: item.id, name: item.name, qty: item.qty, price: item.price, buyPrice: item.buyPrice || 0, discountBeli: item.discountBeli || 0, discountBeliType: item.discountBeliType || '%', batchNo: item.batchNo || '' })),
                         updatedAt: window.serverTimestamp(),
-                        ...(attachmentData ? { attachmentData, attachmentType, attachmentName } : {})
+                        ...(attachmentData ? { attachmentData, attachmentType, attachmentName } : {}),
+                        ...(editingPurchaseId ? {} : {
+                            createdByName: authSession?.namaLengkap || authSession?.username || user?.email || 'Tidak diketahui',
+                            createdByUid: user?.uid || '',
+                        })
                     };
 
                     // 1. Simpan atau update faktur
@@ -4366,7 +4393,37 @@
                 }
             };
 
-            const deletePurchase = async (id) => { try { await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases', id)); showToast("Faktur dihapus"); } catch(err) { showToast("Gagal hapus", "error"); } };
+            const deletePurchase = async (id) => {
+                try {
+                    // Cari data faktur di state untuk rollback stok
+                    const purchase = purchases.find(p => p.id === id);
+                    if (purchase && purchase.items && purchase.items.length > 0) {
+                        const storeId = purchase.storeId || 'default';
+                        let rollbackOk = 0, rollbackFail = 0;
+                        for (const item of purchase.items) {
+                            if (!item.id || !item.qty) continue;
+                            try {
+                                const itemRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
+                                await window.updateDoc(itemRef, {
+                                    [`stocks.${storeId}`]: window.increment(-Number(item.qty))
+                                });
+                                rollbackOk++;
+                            } catch (err) {
+                                console.warn('Gagal rollback stok:', item.name, err);
+                                rollbackFail++;
+                            }
+                        }
+                        if (rollbackFail > 0) {
+                            showToast(`⚠️ ${rollbackOk} stok dikembalikan, ${rollbackFail} gagal`, "error");
+                        }
+                    }
+                    await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases', id));
+                    showToast("🗑️ Faktur dihapus & stok dikembalikan");
+                } catch(err) {
+                    console.error(err);
+                    showToast("Gagal hapus faktur", "error");
+                }
+            };
             const openDeleteModal = (purchaseId, closeDetailAfter = false) => { setDeletePassword(''); setDeletePasswordError(''); setDeletePasswordModal({ show: true, purchaseId, closeDetailAfter }); };
             const handleConfirmDelete = () => {
                 if (deletePassword !== deleteCode) { setDeletePasswordError('Kata sandi salah!'); return; }
@@ -5221,7 +5278,7 @@
                             {/* HEADER */}
                             <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
                                 <div className="flex items-center gap-2">
-                                    <button type="button" onClick={() => setDetailModalOpen(false)} className="text-slate-400 hover:text-slate-700 mr-1"><Icon name="chevron-left" /></button>
+                                    <button type="button" onClick={handleCloseDetail} className="text-slate-400 hover:text-slate-700 mr-1"><Icon name="chevron-left" /></button>
                                     <div>
                                         {isAllStores && (
                                             <div className="mb-0.5">
@@ -5258,6 +5315,10 @@
                                         <div><p className="text-[10px] text-gray-400">Tgl Faktur</p><p className="text-xs font-bold text-slate-800">{selectedPurchase.date ? new Date(selectedPurchase.date).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}) : '-'}</p></div>
                                         <div><p className="text-[10px] text-gray-400">Tgl Diterima</p><p className="text-xs font-bold text-slate-800">{selectedPurchase.receivedDate ? new Date(selectedPurchase.receivedDate).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}) : '-'}{selectedPurchase.receivedTime ? ` ${selectedPurchase.receivedTime}` : ''}</p></div>
                                         {selectedPurchase.dueDate && <div><p className="text-[10px] text-gray-400">Jatuh Tempo</p><p className="text-xs font-bold text-slate-800">{new Date(selectedPurchase.dueDate).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})}</p></div>}
+                                        <div className="col-span-2 border-t border-slate-200 pt-2 mt-1">
+                                            <p className="text-[10px] text-gray-400">✍️ Dicatat oleh</p>
+                                            <p className="text-xs font-bold text-teal-700">{selectedPurchase.createdByName || '-'}</p>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -5375,7 +5436,7 @@
                                         <Icon name="pen-to-square" /> Edit Faktur
                                     </button>
                                 ) : (
-                                    <button type="button" onClick={() => setDetailModalOpen(false)} className="bg-slate-100 text-slate-600 px-4 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5">
+                                    <button type="button" onClick={handleCloseDetail} className="bg-slate-100 text-slate-600 px-4 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5">
                                         <Icon name="xmark" /> Tutup
                                     </button>
                                 )}
@@ -8716,7 +8777,7 @@
         };
 
         // --- UPDATED: HISTORY VIEW ---
-        const HistoryView = ({ user, showToast, settings, onGenerateImage, currentProfile, items, readOnly, isOwner, authSession }) => {
+        const HistoryView = ({ user, showToast, settings, onGenerateImage, currentProfile, items, readOnly, isOwner, authSession, defaultOpenTransactionId, onClearPendingTransaction }) => {
             const [transactions, setTransactions] = useState([]);
             const [loading, setLoading] = useState(true);
             const [selectedTx, setSelectedTx] = useState(null);
@@ -8737,6 +8798,16 @@
             const [daysOffset, setDaysOffset] = useState(0);   // 0 = 7 hari terakhir, -7 = 7 hari sebelumnya, dst
             const [monthOffset, setMonthOffset] = useState(0); // 0 = bulan ini, -1 = bulan lalu, dst
             const [daysOffset30, setDaysOffset30] = useState(0); // 0 = 30 hari terakhir
+
+            // Auto-open transaksi ketika navigasi dari riwayat stok
+            useEffect(() => {
+                if (!defaultOpenTransactionId || transactions.length === 0) return;
+                const target = transactions.find(t => t.id === defaultOpenTransactionId);
+                if (target) {
+                    setSelectedTx(target);
+                    onClearPendingTransaction && onClearPendingTransaction();
+                }
+            }, [defaultOpenTransactionId, transactions]);
 
             const [historySearch, setHistorySearch] = useState('');
             const [historySearchInput, setHistorySearchInput] = useState('');
@@ -10469,14 +10540,14 @@
         };
         // ====== END HALAMAN RIWAYAT PERUBAHAN HARGA ======
 
-        const ProductDetailPage = ({ item, onBack, onEdit, onDelete, settings, readOnly, isOwner, lowStockThreshold, currentProfile }) => {
+        const ProductDetailPage = ({ item, onBack, onEdit, onDelete, settings, readOnly, isOwner, lowStockThreshold, currentProfile, onNavigateToPurchases, onNavigateToHistory, initialTab }) => {
             const threshold = item.minStock ? safeNumber(item.minStock) : lowStockThreshold;
             const isLow = safeNumber(item.qty) < threshold;
             const daysLeft = getDaysRemaining(item.exp);
             const isExpired = daysLeft !== null && daysLeft < 0;
             const isNearExp = daysLeft !== null && daysLeft < 90 && !isExpired;
 
-            const [activeTab, setActiveTab] = useState('detail');
+            const [activeTab, setActiveTab] = useState(initialTab || 'detail');
             const [batches, setBatches] = useState([]);
             const [stockHistory, setStockHistory] = useState([]);
             const [loadingBatch, setLoadingBatch] = useState(false);
@@ -10579,14 +10650,14 @@
                                     activity: 'Beli',
                                     date: d.date,
                                     qty: safeNumber(it.qty),
-                                    oleh: d.createdBy || d.updatedBy || '-',
+                                    oleh: d.createdByName || d.cashierName || d.createdBy || '-',
                                     ref: doc.id,
                                     batchNo: it.batchNo || '',
                                     exp: it.exp || '',
-                                    noFaktur: d.noFaktur || '',
+                                    noFaktur: d.invoiceNumber || '',
                                     supplier: d.supplier || '',
-                                    keterangan: d.noFaktur
-                                        ? (d.supplier ? `${d.noFaktur} · ${d.supplier}` : d.noFaktur)
+                                    keterangan: d.invoiceNumber
+                                        ? (d.supplier ? `${d.invoiceNumber} · ${d.supplier}` : d.invoiceNumber)
                                         : (d.supplier || doc.id),
                                 });
                             }
@@ -10886,16 +10957,31 @@
                                                         if (h.activity === 'Beli') {
                                                             keteranganDisplay = (
                                                                 <div>
-                                                                    {h.noFaktur && <p className="text-xs text-teal-600 font-semibold">{h.noFaktur}</p>}
-                                                                    {h.supplier && <p className="text-xs text-slate-600 font-medium">{h.supplier}</p>}
-                                                                    {!h.noFaktur && !h.supplier && <p className="text-xs text-slate-400">-</p>}
+                                                                    {h.noFaktur ? (
+                                                                        <button
+                                                                            onClick={() => onNavigateToPurchases && onNavigateToPurchases(h.ref, item)}
+                                                                            className="text-xs text-teal-600 font-semibold underline underline-offset-2 hover:text-teal-800 active:opacity-70 transition-colors text-left"
+                                                                        >{h.noFaktur}</button>
+                                                                    ) : h.ref ? (
+                                                                        <button
+                                                                            onClick={() => onNavigateToPurchases && onNavigateToPurchases(h.ref, item)}
+                                                                            className="text-xs text-teal-600 font-semibold underline underline-offset-2 hover:text-teal-800 active:opacity-70 transition-colors text-left"
+                                                                        >Lihat Faktur</button>
+                                                                    ) : null}
+                                                                    {h.supplier && <p className="text-xs text-slate-600 font-medium mt-0.5">{h.supplier}</p>}
+                                                                    {!h.noFaktur && !h.ref && !h.supplier && <p className="text-xs text-slate-400">-</p>}
                                                                 </div>
                                                             );
                                                         } else if (h.activity === 'Stok opname') {
                                                             keteranganDisplay = <p className="text-xs text-teal-600 font-semibold">{h.keterangan || 'Stok opname'}</p>;
                                                         } else {
-                                                            // Jual — tampilkan no. transaksi
-                                                            keteranganDisplay = <p className="text-xs text-teal-600 font-semibold">{h.keterangan || '-'}</p>;
+                                                            // Jual — tampilkan no. transaksi sebagai link
+                                                            keteranganDisplay = h.keterangan ? (
+                                                                <button
+                                                                    onClick={() => onNavigateToHistory && onNavigateToHistory(h.ref)}
+                                                                    className="text-xs text-teal-600 font-semibold underline underline-offset-2 hover:text-teal-800 active:opacity-70 transition-colors text-left"
+                                                                >{h.keterangan}</button>
+                                                            ) : <p className="text-xs text-slate-400">-</p>;
                                                         }
 
                                                         return (
@@ -10921,7 +11007,7 @@
                                                                         <p className={`text-xs font-bold ${signColor}`}>{sign}{h.qty}</p>
                                                                     </div>
                                                                     <div>
-                                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">{h.activity === 'Beli' ? 'Faktur / Supplier' : 'Keterangan'}</p>
+                                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">Keterangan</p>
                                                                         {keteranganDisplay}
                                                                     </div>
                                                                 </div>
@@ -10961,15 +11047,30 @@
                                                                         <p className="text-xs text-slate-700">{h.supplier || '-'}</p>
                                                                     </div>
                                                                     <div>
-                                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">{h.activity === 'Beli' ? 'Faktur / Supplier' : 'Keterangan'}</p>
+                                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">Keterangan</p>
                                                                         {h.activity === 'Beli' ? (
                                                                             <div>
-                                                                                {h.noFaktur && <p className="text-xs text-teal-600 font-semibold">{h.noFaktur}</p>}
-                                                                                {h.supplier && <p className="text-xs text-slate-600 font-medium">{h.supplier}</p>}
-                                                                                {!h.noFaktur && !h.supplier && <p className="text-xs text-slate-400">-</p>}
+                                                                                {h.noFaktur ? (
+                                                                                    <button
+                                                                                        onClick={() => onNavigateToPurchases && onNavigateToPurchases(h.ref, item)}
+                                                                                        className="text-xs text-teal-600 font-semibold underline underline-offset-2 hover:text-teal-800 active:opacity-70 transition-colors text-left"
+                                                                                    >{h.noFaktur}</button>
+                                                                                ) : h.ref ? (
+                                                                                    <button
+                                                                                        onClick={() => onNavigateToPurchases && onNavigateToPurchases(h.ref, item)}
+                                                                                        className="text-xs text-teal-600 font-semibold underline underline-offset-2 hover:text-teal-800 active:opacity-70 transition-colors text-left"
+                                                                                    >Lihat Faktur</button>
+                                                                                ) : null}
+                                                                                {h.supplier && <p className="text-xs text-slate-600 font-medium mt-0.5">{h.supplier}</p>}
+                                                                                {!h.noFaktur && !h.ref && !h.supplier && <p className="text-xs text-slate-400">-</p>}
                                                                             </div>
+                                                                        ) : h.keterangan ? (
+                                                                            <button
+                                                                                onClick={() => onNavigateToHistory && onNavigateToHistory(h.ref)}
+                                                                                className="text-xs text-teal-600 font-semibold underline underline-offset-2 hover:text-teal-800 active:opacity-70 transition-colors text-left"
+                                                                            >{h.keterangan}</button>
                                                                         ) : (
-                                                                            <p className="text-xs text-teal-600 font-semibold">{h.keterangan || '-'}</p>
+                                                                            <p className="text-xs text-slate-400">-</p>
                                                                         )}
                                                                     </div>
                                                                 </div>
@@ -10989,12 +11090,22 @@
             );
         };
 
-        const ListView = ({ items, searchQuery, setSearchQuery, onEdit, onDelete, onDeleteRack, showOnlyLowStock, setShowOnlyLowStock, selectedRacks, setSelectedRacks, uniqueRacksData, onCopySuccess, loading, settings, currentProfile, readOnly, isOwner }) => {
+        const ListView = ({ items, searchQuery, setSearchQuery, onEdit, onDelete, onDeleteRack, showOnlyLowStock, setShowOnlyLowStock, selectedRacks, setSelectedRacks, uniqueRacksData, onCopySuccess, loading, settings, currentProfile, readOnly, isOwner, onNavigateToPurchases, onNavigateToHistory, returnDetailItem, onClearReturnDetailItem, returnInitialTab }) => {
             const [isRackDropdownOpen, setIsRackDropdownOpen] = useState(false);
             const [rackSearch, setRackSearch] = useState('');
             const dropdownRef = useRef(null);
             const [noteModalItem, setNoteModalItem] = useState(null);
             const [selectedDetailItem, setSelectedDetailItem] = useState(null);
+            const [detailInitialTab, setDetailInitialTab] = useState(null);
+
+            // Kembali ke product detail setelah navigasi dari detail faktur
+            useEffect(() => {
+                if (returnDetailItem) {
+                    setDetailInitialTab(returnInitialTab || null);
+                    setSelectedDetailItem(returnDetailItem);
+                    onClearReturnDetailItem && onClearReturnDetailItem();
+                }
+            }, []);
             
             const ITEMS_PER_PAGE = 20;
             const [displayedLimit, setDisplayedLimit] = useState(ITEMS_PER_PAGE);
@@ -11156,7 +11267,7 @@
                 return (
                     <ProductDetailPage
                         item={selectedDetailItem}
-                        onBack={() => setSelectedDetailItem(null)}
+                        onBack={() => { setSelectedDetailItem(null); setDetailInitialTab(null); }}
                         onEdit={onEdit}
                         onDelete={onDelete}
                         settings={settings}
@@ -11164,6 +11275,9 @@
                         isOwner={isOwner}
                         lowStockThreshold={settings.lowStockThreshold || DEFAULT_SETTINGS.lowStockThreshold}
                         currentProfile={currentProfile}
+                        onNavigateToPurchases={onNavigateToPurchases}
+                        onNavigateToHistory={onNavigateToHistory}
+                        initialTab={detailInitialTab}
                     />
                 );
             }
@@ -15358,6 +15472,10 @@
             const [settingsData, setSettingsData] = useState(DEFAULT_SETTINGS); 
             const [loading, setLoading] = useState(true);
             const [activeTab, setActiveTab] = useState('cashier'); 
+            const [pendingPurchaseId, setPendingPurchaseId] = useState(null);
+            const [pendingTransactionId, setPendingTransactionId] = useState(null);
+            const [returnDetailItem, setReturnDetailItem] = useState(null);
+            const [returnInitialTab, setReturnInitialTab] = useState(null);
             const [searchQuery, setSearchQuery] = useState('');
             const [showOnlyLowStock, setShowOnlyLowStock] = useState(false);
             const [selectedRacks, setSelectedRacks] = useState([]);
@@ -16460,11 +16578,11 @@
                         <NegativeStockBanner items={inventoryData} settings={settingsData} onNavigateToPurchases={() => setActiveTab('purchases')} />
                         {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} currentProfile={currentProfile} isOwner={isOwner} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
                         {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='cashier')?.readOnly} authSession={authSession} onNavigateToAdd={() => setActiveTab('add')} isOwner={isOwner} />)}
-                        {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} items={inventoryData} readOnly={menuItems.find(m=>m.id==='history')?.readOnly} isOwner={isOwner} authSession={authSession} />)}
+                        {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} items={inventoryData} readOnly={menuItems.find(m=>m.id==='history')?.readOnly} isOwner={isOwner} authSession={authSession} defaultOpenTransactionId={pendingTransactionId} onClearPendingTransaction={() => setPendingTransactionId(null)} />)}
                         {activeTab === 'rekap_barang' && (<RekapBarangView user={user} currentProfile={currentProfile} settings={settingsData} />)}
-                        {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} settings={settingsData} readOnly={menuItems.find(m=>m.id==='purchases')?.readOnly} />)}
+                        {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} settings={settingsData} readOnly={menuItems.find(m=>m.id==='purchases')?.readOnly} authSession={authSession} defaultOpenPurchaseId={pendingPurchaseId} onClearPendingPurchase={() => setPendingPurchaseId(null)} onBackFromDetail={() => setActiveTab('list')} />)}
                         {activeTab === 'cashbook' && (<CashBookView user={user} currentProfile={currentProfile} showToast={showToast} readOnly={menuItems.find(m=>m.id==='cashbook')?.readOnly} />)}
-                        {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='list')?.readOnly} isOwner={isOwner} />)}
+                        {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='list')?.readOnly} isOwner={isOwner} onNavigateToPurchases={(purchaseId, returnItem) => { setPendingPurchaseId(purchaseId); if (returnItem) { setReturnDetailItem(returnItem); setReturnInitialTab('riwayat'); } setActiveTab('purchases'); }} onNavigateToHistory={(transactionId) => { setPendingTransactionId(transactionId); setActiveTab('history'); }} returnDetailItem={returnDetailItem} onClearReturnDetailItem={() => { setReturnDetailItem(null); setReturnInitialTab(null); }} returnInitialTab={returnInitialTab} />)}
                         {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', costPrice:'', minStock: '', defaultDiscount: '', defaultDiscountType: '%', packagePrices: []}); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='add')?.readOnly} />)}
                         {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='import')?.readOnly} />)}
                         {activeTab === 'stock_opname' && (<StockOpnameView items={inventoryData} user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='stock_opname')?.readOnly} isOwner={isOwner} />)}
