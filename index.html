@@ -10346,11 +10346,655 @@
             );
         };
 
+        // ====== HALAMAN RIWAYAT PERUBAHAN HARGA ======
+        const PriceHistoryPage = ({ item, onBack }) => {
+            const [history, setHistory] = useState([]);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                if (!item?.id) return;
+                setLoading(true);
+                // Hanya filter by itemId, sort client-side (hindari composite index)
+                window.getDocs(
+                    window.query(
+                        window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'priceHistory'),
+                        window.where('itemId', '==', item.id),
+                        window.limit(100)
+                    )
+                ).then(snap => {
+                    const rows = [];
+                    snap.forEach(doc => rows.push({ ...doc.data(), id: doc.id }));
+                    // Sort client-side: terbaru dulu
+                    rows.sort((a, b) => {
+                        const ta = a.changedAt?.toDate ? a.changedAt.toDate().getTime() : 0;
+                        const tb = b.changedAt?.toDate ? b.changedAt.toDate().getTime() : 0;
+                        return tb - ta;
+                    });
+                    setHistory(rows);
+                    setLoading(false);
+                }).catch(err => {
+                    console.error('Error load priceHistory:', err);
+                    setLoading(false);
+                });
+            }, [item?.id]);
+
+            return (
+                <div className="min-h-screen bg-white flex flex-col">
+                    {/* Header */}
+                    <div className="sticky top-0 z-10 bg-white border-b border-slate-100 px-4 pt-4 pb-3">
+                        <button onClick={onBack} className="flex items-center gap-1.5 text-slate-500 text-sm mb-3 hover:text-slate-800 transition-colors">
+                            <Icon name="xmark" className="text-lg" />
+                        </button>
+                        <h1 className="text-2xl font-extrabold text-slate-800 leading-tight">Riwayat perubahan<br/>harga</h1>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 overflow-y-auto">
+                        {loading ? (
+                            <div className="flex items-center justify-center py-20 gap-2 text-slate-400">
+                                <div className="w-5 h-5 border-2 border-slate-200 border-t-teal-500 rounded-full animate-spin"></div>
+                                <span className="text-sm">Memuat riwayat...</span>
+                            </div>
+                        ) : history.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-24 opacity-40 px-8 text-center">
+                                <Icon name="clock-rotate-left" className="text-4xl text-slate-400 mb-3" />
+                                <p className="font-bold text-slate-500">Belum ada riwayat perubahan harga</p>
+                                <p className="text-xs text-slate-400 mt-1">Riwayat tercatat otomatis saat harga diubah dan disimpan</p>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-slate-100">
+                                {history.map((h, idx) => {
+                                    const tgl = h.changedAt?.toDate ? h.changedAt.toDate() : null;
+                                    const tglStr = tgl ? tgl.toLocaleDateString('id-ID', {
+                                        year: 'numeric', month: 'short', day: 'numeric',
+                                        hour: '2-digit', minute: '2-digit'
+                                    }) + ' WIB' : '-';
+                                    const oldP = safeNumber(h.oldPrice);
+                                    const newP = safeNumber(h.newPrice);
+                                    const naik = newP > oldP && oldP > 0;
+                                    const turun = newP < oldP && oldP > 0;
+                                    const label = h.source === 'purchase'
+                                        ? `Catat faktur ${h.noFaktur || ''}`.trim()
+                                        : 'Update harga manual';
+                                    return (
+                                        <div key={h.id || idx} className="px-5 py-4">
+                                            <p className="text-[11px] text-slate-400 mb-1">{tglStr}</p>
+                                            <p className="text-[13px] font-bold text-slate-800 mb-0.5">{label}</p>
+                                            {h.noFaktur && (
+                                                <p className="text-xs text-teal-600 font-semibold mb-0.5">
+                                                    Tanggal faktur diterima {tglStr}
+                                                </p>
+                                            )}
+                                            <p className="text-[11px] text-slate-400 mb-3">Oleh {h.changedBy || '-'}</p>
+                                            <div className="border border-slate-100 rounded-xl p-3 space-y-3">
+                                                <div className="flex gap-6">
+                                                    <div>
+                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">PPN</p>
+                                                        <p className="text-xs text-slate-700">Memiliki PPN</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">Multi satuan</p>
+                                                        <p className="text-xs text-slate-700">Tidak</p>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-slate-500 mb-0.5">Diskon</p>
+                                                    <p className="text-xs text-slate-700">Rp0</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-slate-500 mb-1">Harga jual</p>
+                                                    {oldP > 0 && oldP !== newP ? (
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="text-xs text-slate-400">{formatRupiah(oldP)}</span>
+                                                            <span className="text-slate-300 text-sm">→</span>
+                                                            <span className={`text-base font-extrabold ${naik ? 'text-emerald-500' : turun ? 'text-rose-500' : 'text-slate-800'}`}>
+                                                                {formatRupiah(newP)}
+                                                            </span>
+                                                            {naik && <span className="text-[9px] font-bold bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded-full">▲ Naik</span>}
+                                                            {turun && <span className="text-[9px] font-bold bg-rose-50 text-rose-500 px-1.5 py-0.5 rounded-full">▼ Turun</span>}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-base font-extrabold text-slate-800">{formatRupiah(newP)}</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+        // ====== END HALAMAN RIWAYAT PERUBAHAN HARGA ======
+
+        const ProductDetailPage = ({ item, onBack, onEdit, onDelete, settings, readOnly, isOwner, lowStockThreshold, currentProfile }) => {
+            const threshold = item.minStock ? safeNumber(item.minStock) : lowStockThreshold;
+            const isLow = safeNumber(item.qty) < threshold;
+            const daysLeft = getDaysRemaining(item.exp);
+            const isExpired = daysLeft !== null && daysLeft < 0;
+            const isNearExp = daysLeft !== null && daysLeft < 90 && !isExpired;
+
+            const [activeTab, setActiveTab] = useState('detail');
+            const [batches, setBatches] = useState([]);
+            const [stockHistory, setStockHistory] = useState([]);
+            const [loadingBatch, setLoadingBatch] = useState(false);
+            const [loadingHistory, setLoadingHistory] = useState(false);
+            const [showPriceHistory, setShowPriceHistory] = useState(false);
+            const [stockViewMode, setStockViewMode] = useState('kegiatan'); // 'kegiatan' | 'batch'
+            const [sortAsc, setSortAsc] = useState(false); // false = terbaru dulu
+
+            // Parse units
+            const units = React.useMemo(() => {
+                if (item.units && Array.isArray(item.units) && item.units.length > 0) return item.units;
+                return [{ name: item.unit || 'Pcs', abbr: item.unit || 'Pcs', qtyPerUnit: 1, price: item.price || 0, discount: null }];
+            }, [item]);
+
+            // Load batches from purchases
+            useEffect(() => {
+                if (activeTab !== 'batch') return;
+                setLoadingBatch(true);
+                const q = window.query(
+                    window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases'),
+                    window.orderBy('date', 'desc'),
+                    window.limit(200)
+                );
+                window.getDocs(q).then(snap => {
+                    const result = [];
+                    snap.forEach(doc => {
+                        const d = doc.data();
+                        (d.items || []).forEach(it => {
+                            const itName = (it.name || '').toLowerCase().trim();
+                            const itemName = (item.name || '').toLowerCase().trim();
+                            if (itName === itemName && it.batchNo) {
+                                result.push({ batchNo: it.batchNo, qty: it.qty, date: d.date, supplier: d.supplier || '-', exp: it.exp || null });
+                            }
+                        });
+                    });
+                    // Deduplicate by batchNo, sum qty
+                    const map = {};
+                    result.forEach(r => {
+                        if (!map[r.batchNo]) map[r.batchNo] = { ...r, totalQty: safeNumber(r.qty) };
+                        else map[r.batchNo].totalQty += safeNumber(r.qty);
+                    });
+                    setBatches(Object.values(map).sort((a,b) => (b.date||'').localeCompare(a.date||'')));
+                    setLoadingBatch(false);
+                }).catch(() => setLoadingBatch(false));
+            }, [activeTab, item.name]);
+
+            // Load stock history from transactions + purchases + stock opname
+            useEffect(() => {
+                if (activeTab !== 'riwayat') return;
+                setLoadingHistory(true);
+                const itemName = (item.name || '').toLowerCase().trim();
+
+                // Transaksi penjualan (keluar) — filter per toko langsung di Firestore
+                const activeStoreId = currentProfile?.id || 'default';
+                const isAllStores = activeStoreId === 'all_stores';
+                const txQuery = isAllStores
+                    ? window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions')
+                    : window.query(
+                        window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions'),
+                        window.where('storeId', '==', activeStoreId)
+                      );
+                const prom1 = window.getDocs(txQuery).then(snap => {
+                    const rows = [];
+                    snap.forEach(doc => {
+                        const d = doc.data();
+                        (d.items || []).forEach(it => {
+                            if ((it.name || '').toLowerCase().trim() === itemName) {
+                                rows.push({
+                                    type: 'keluar',
+                                    activity: 'Jual',
+                                    date: d.date || d.createdAt,
+                                    qty: safeNumber(it.qty),
+                                    oleh: d.cashierName || d.kasir || d.user || '-',
+                                    ref: d.id || doc.id,
+                                    batchNo: it.batchNo || '',
+                                    exp: it.exp || '',
+                                    keterangan: `#${(d.id || doc.id || '').slice(-10).toUpperCase()}`,
+                                });
+                            }
+                        });
+                    });
+                    return rows;
+                }).catch(() => []);
+
+                // Faktur pembelian (masuk) — filter per toko langsung di Firestore
+                const purchaseQuery = isAllStores
+                    ? window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases')
+                    : window.query(
+                        window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases'),
+                        window.where('storeId', '==', activeStoreId)
+                      );
+                const prom2 = window.getDocs(purchaseQuery).then(snap => {
+                    const rows = [];
+                    snap.forEach(doc => {
+                        const d = doc.data();
+                        (d.items || []).forEach(it => {
+                            if ((it.name || '').toLowerCase().trim() === itemName) {
+                                rows.push({
+                                    type: 'masuk',
+                                    activity: 'Beli',
+                                    date: d.date,
+                                    qty: safeNumber(it.qty),
+                                    oleh: d.createdBy || d.updatedBy || '-',
+                                    ref: doc.id,
+                                    batchNo: it.batchNo || '',
+                                    exp: it.exp || '',
+                                    noFaktur: d.noFaktur || '',
+                                    supplier: d.supplier || '',
+                                    keterangan: d.noFaktur
+                                        ? (d.supplier ? `${d.noFaktur} · ${d.supplier}` : d.noFaktur)
+                                        : (d.supplier || doc.id),
+                                });
+                            }
+                        });
+                    });
+                    return rows;
+                }).catch(() => []);
+
+                // Stock opname — filter per toko langsung di Firestore
+                const opnameQuery = isAllStores
+                    ? window.query(
+                        window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname'),
+                        window.where('status', '==', 'closed')
+                      )
+                    : window.query(
+                        window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname'),
+                        window.where('status', '==', 'closed'),
+                        window.where('profileId', '==', activeStoreId)
+                      );
+                const prom3 = window.getDocs(opnameQuery).then(snap => {
+                    const rows = [];
+                    snap.forEach(doc => {
+                        const d = doc.data();
+                        if (d.status !== 'closed') return;
+                        (d.entries || []).forEach(e => {
+                            if ((e.name || '').toLowerCase().trim() === itemName && e.selisih !== 0) {
+                                const selisih = safeNumber(e.selisih);
+                                const tgl = d.finishedAt?.toDate ? d.finishedAt.toDate().toISOString().slice(0,10) : d.finishedAt || '';
+                                rows.push({
+                                    type: selisih > 0 ? 'masuk' : 'keluar',
+                                    activity: 'Stok opname',
+                                    date: tgl,
+                                    qty: Math.abs(selisih),
+                                    oleh: d.closedBy || d.createdBy || '-',
+                                    ref: doc.id,
+                                    batchNo: '',
+                                    exp: '',
+                                    keterangan: `Stok opname ${tgl ? new Date(tgl).toLocaleDateString('id-ID', { year:'numeric', month:'short', day:'numeric' }) : ''}`,
+                                });
+                            }
+                        });
+                    });
+                    return rows;
+                }).catch(() => []);
+
+                Promise.all([prom1, prom2, prom3]).then(([keluar, masuk, opname]) => {
+                    // Normalisasi date ke string ISO agar bisa disort
+                    const toISO = (d) => {
+                        if (!d) return '';
+                        if (d?.toDate) return d.toDate().toISOString();
+                        if (d?.seconds) return new Date(d.seconds * 1000).toISOString();
+                        return String(d);
+                    };
+                    const all = [...keluar, ...masuk, ...opname]
+                        .map(h => ({ ...h, _dateISO: toISO(h.date) }))
+                        .sort((a, b) => b._dateISO.localeCompare(a._dateISO));
+                    // Hitung running total dari sekarang mundur ke belakang
+                    // Stok awal: pakai per-toko jika ada, fallback ke item.qty
+                    const storeQty = (item.stocks && activeStoreId !== 'all_stores')
+                        ? safeNumber(item.stocks[activeStoreId] ?? item.qty)
+                        : safeNumber(item.qty);
+                    let runningTotal = storeQty;
+                    const withTotal = all.map(h => {
+                        const entry = { ...h, totalAfter: runningTotal };
+                        if (h.type === 'keluar') runningTotal += h.qty;
+                        else runningTotal -= h.qty;
+                        return entry;
+                    });
+                    setStockHistory(withTotal.slice(0, 100));
+                    setLoadingHistory(false);
+                }).catch((err) => {
+                    console.error('Gagal memuat riwayat stok:', err);
+                    setLoadingHistory(false);
+                });
+            }, [activeTab, item.name, item.qty, currentProfile?.id]);
+
+            const tabs = [
+                { id: 'detail', label: 'Detail Harga' },
+                { id: 'batch', label: 'Batch pada stok', sub: 'dalam butir' },
+                { id: 'riwayat', label: 'Riwayat stok', sub: 'dalam butir' },
+            ];
+
+            // Tampilkan halaman riwayat harga jika diminta
+            if (showPriceHistory) {
+                return <PriceHistoryPage item={item} onBack={() => setShowPriceHistory(false)} />;
+            }
+
+            return (
+                <div className="fade-in h-full flex flex-col relative z-10 bg-white min-h-screen">
+                    <div className="flex-1 overflow-y-auto pb-24 custom-scrollbar">
+
+                        {/* Back + action buttons row */}
+                        <div className="flex items-center justify-between px-3 pt-3 pb-1">
+                            <button onClick={onBack} className="flex items-center gap-1.5 text-teal-600 font-semibold text-sm py-1.5 px-2 rounded-lg hover:bg-teal-50 transition-colors active:scale-95">
+                                <Icon name="arrow-left" className="text-xs" />
+                            </button>
+                            {!readOnly && (
+                                <div className="flex gap-2">
+                                    <button onClick={() => { onEdit(item); onBack(); }} className="py-1.5 px-3.5 rounded-lg bg-teal-500 text-white text-xs font-bold hover:bg-teal-600 transition-all active:scale-95 flex items-center gap-1.5">
+                                        <Icon name="pen" /> Update harga
+                                    </button>
+                                    <button onClick={() => { onEdit(item); onBack(); }} className="py-1.5 px-3.5 rounded-lg bg-teal-500 text-white text-xs font-bold hover:bg-teal-600 transition-all active:scale-95 flex items-center gap-1.5">
+                                        <Icon name="boxes-stacked" /> Update stok
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Product name */}
+                        <div className="px-4 pt-2 pb-3">
+                            <h1 className="text-2xl font-extrabold text-slate-800 leading-tight">{item.name}</h1>
+                            {item.rack && item.rack !== '-' && (
+                                <p className="text-xs text-slate-400 mt-1 flex items-center gap-1"><Icon name="location-dot" /> {item.rack}</p>
+                            )}
+                        </div>
+
+                        {/* Stok + Stok minimum */}
+                        <div className="px-4 pb-4 grid grid-cols-2 gap-6">
+                            <div>
+                                <p className="text-sm font-bold text-slate-600 mb-1">Stok</p>
+                                <p className={`text-4xl font-extrabold leading-none ${isLow ? 'text-amber-600' : 'text-slate-800'}`}>{item.qty}</p>
+                                <p className="text-base font-semibold text-slate-500 mt-0.5">{item.unit || 'Pcs'}</p>
+                                {isLow && <span className="mt-1 inline-block text-[9px] font-black text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Stok Menipis</span>}
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-slate-600 mb-1">Stok minimum</p>
+                                <p className="text-4xl font-extrabold text-slate-800 leading-none">{threshold}</p>
+                                <p className="text-base font-semibold text-slate-500 mt-0.5">{item.unit || 'Pcs'}</p>
+                            </div>
+                        </div>
+
+                        {/* Tabs */}
+                        <div className="flex gap-0 px-4 mt-2 mb-0 overflow-x-auto">
+                            {tabs.map(tab => (
+                                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                                    className={`flex flex-col items-center pb-2 pt-2 px-4 text-xs font-semibold transition-colors whitespace-nowrap ${activeTab === tab.id ? 'text-teal-600 border-b-2 border-teal-600' : 'text-slate-400 border-b-2 border-transparent hover:text-slate-600'}`}>
+                                    <span>{tab.label}</span>
+                                    {tab.sub && <span className="text-[9px] font-normal opacity-60">{tab.sub}</span>}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="h-px bg-slate-100 mx-0 mb-4" />
+
+                        {/* Tab: Detail Harga */}
+                        {activeTab === 'detail' && (
+                            <div>
+                                {/* Nama satuan header */}
+                                <div className="px-4 pb-1">
+                                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Nama satuan</p>
+                                </div>
+                                <div className="divide-y divide-slate-100">
+                                    {units.map((u, idx) => {
+                                        const unitName = u.name || u.unit || item.unit || 'Pcs';
+                                        const abbr = u.abbr || u.unit || unitName;
+                                        const qtyPerUnit = u.qtyPerUnit || u.ratio || 1;
+                                        const unitPrice = safeNumber(u.price) > 0 ? safeNumber(u.price) : (safeNumber(item.price) * qtyPerUnit);
+                                        const discount = u.discount || null;
+                                        return (
+                                            <div key={idx} className="px-4 py-4">
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <span className="text-xs font-semibold text-slate-400">{idx + 1}</span>
+                                                    <p className="text-sm font-bold text-teal-600">{unitName}</p>
+                                                </div>
+                                                <div className="ml-5 grid grid-cols-2 gap-y-3 gap-x-6">
+                                                    <div>
+                                                        <p className="text-xs font-bold text-slate-800 mb-0.5">Singkatan</p>
+                                                        <p className="text-sm text-slate-600">{abbr}{qtyPerUnit > 1 ? ` (${qtyPerUnit}s)` : ''}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs font-bold text-slate-800 mb-0.5">Diskon</p>
+                                                        <p className="text-sm text-slate-600">{discount ? discount : '-'}</p>
+                                                    </div>
+                                                    <div className="col-span-2">
+                                                        <p className="text-xs font-bold text-slate-800 mb-0.5">Harga jual</p>
+                                                        <p className="text-sm font-semibold text-slate-800">{unitPrice > 0 ? formatRupiah(unitPrice) : '-'}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                {/* Footer */}
+                                <div className="px-4 pt-4 pb-6">
+                                    <p className="text-[11px] italic text-slate-400">Harga barang dikenakan PPN</p>
+                                    {item.updatedAt && <p className="text-[10px] text-slate-400 mt-0.5">Terakhir diperbarui oleh {item.updatedBy || '-'}, {item.updatedAt?.toDate ? item.updatedAt.toDate().toLocaleDateString('id-ID', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '-'} WIB. <span className="text-teal-500 cursor-pointer underline" onClick={() => setShowPriceHistory(true)}>Lihat riwayat</span></p>}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Tab: Batch pada stok */}
+                        {activeTab === 'batch' && (
+                            <div className="px-4">
+                                {loadingBatch ? (
+                                    <div className="flex items-center justify-center py-12 text-slate-400 text-sm gap-2"><div className="w-4 h-4 border-2 border-slate-200 border-t-teal-500 rounded-full animate-spin"></div>Memuat batch...</div>
+                                ) : batches.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-14 opacity-40">
+                                        <Icon name="box-open" className="text-3xl text-slate-400 mb-2" />
+                                        <p className="text-sm text-slate-500 font-semibold">Tidak ada data batch</p>
+                                        <p className="text-xs text-slate-400 mt-1">Catat nomor batch saat input faktur pembelian</p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-slate-100">
+                                        {/* Header row */}
+                                        <div className="grid grid-cols-3 pb-2 gap-2">
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase">No. Batch</p>
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase">Qty masuk</p>
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase">Tanggal</p>
+                                        </div>
+                                        {batches.map((b, idx) => (
+                                            <div key={idx} className="grid grid-cols-3 py-3 gap-2 items-start">
+                                                <div>
+                                                    <p className="text-sm font-bold text-teal-700">{b.batchNo}</p>
+                                                    {b.supplier && b.supplier !== '-' && <p className="text-[10px] text-slate-400">{b.supplier}</p>}
+                                                </div>
+                                                <p className="text-sm font-semibold text-slate-800">{b.totalQty} {item.unit || 'Pcs'}</p>
+                                                <div>
+                                                    <p className="text-sm text-slate-600">{b.date ? formatDateIndo(b.date) : '-'}</p>
+                                                    {b.exp && <p className={`text-[10px] ${getDaysRemaining(b.exp) !== null && getDaysRemaining(b.exp) < 0 ? 'text-red-500' : getDaysRemaining(b.exp) !== null && getDaysRemaining(b.exp) < 90 ? 'text-amber-500' : 'text-slate-400'}`}>Exp: {formatDateIndo(b.exp)}</p>}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Tab: Riwayat stok */}
+                        {activeTab === 'riwayat' && (
+                            <div>
+                                {/* Header kontrol */}
+                                <div className="px-4 pt-2 pb-3 space-y-3">
+                                    {/* Toggle Per kegiatan / Per batch + Unduh */}
+                                    <div className="flex items-center gap-3">
+                                        <button onClick={() => setStockViewMode('kegiatan')} className="flex items-center gap-2">
+                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${stockViewMode === 'kegiatan' ? 'border-teal-600 bg-teal-600' : 'border-slate-300 bg-white'}`}>
+                                                {stockViewMode === 'kegiatan' && <Icon name="check" className="text-white text-[9px]" />}
+                                            </div>
+                                            <span className="text-sm font-semibold text-slate-700 leading-tight">Per<br/>kegiatan</span>
+                                        </button>
+                                        <button onClick={() => setStockViewMode('batch')} className="flex items-center gap-2">
+                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${stockViewMode === 'batch' ? 'border-teal-600 bg-teal-600' : 'border-slate-300 bg-white'}`}>
+                                                {stockViewMode === 'batch' && <Icon name="check" className="text-white text-[9px]" />}
+                                            </div>
+                                            <span className="text-sm font-semibold text-slate-700 leading-tight">Per<br/>batch</span>
+                                        </button>
+                                        <button className="ml-auto flex items-center gap-1.5 border border-teal-600 text-teal-600 text-xs font-semibold px-3 py-2 rounded-lg hover:bg-teal-50 transition-colors active:scale-95">
+                                            <Icon name="download" className="text-xs" />
+                                            Unduh kartu stok
+                                        </button>
+                                    </div>
+                                    {/* Sort dropdown */}
+                                    <button onClick={() => setSortAsc(v => !v)} className="flex items-center justify-between w-48 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 font-medium bg-white hover:bg-slate-50 transition-colors">
+                                        <span>{sortAsc ? 'Tanggal terlama' : 'Tanggal terbaru'}</span>
+                                        <Icon name="chevron-down" className="text-slate-400 text-xs" />
+                                    </button>
+                                </div>
+
+                                {loadingHistory ? (
+                                    <div className="flex items-center justify-center py-12 text-slate-400 text-sm gap-2"><div className="w-4 h-4 border-2 border-slate-200 border-t-teal-500 rounded-full animate-spin"></div>Memuat riwayat...</div>
+                                ) : stockHistory.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-14 opacity-40 px-4 text-center">
+                                        <Icon name="clock-rotate-left" className="text-3xl text-slate-400 mb-2" />
+                                        <p className="text-sm text-slate-500 font-semibold">Belum ada riwayat</p>
+                                        <p className="text-xs text-slate-400 mt-1">Riwayat muncul setelah ada transaksi atau input faktur</p>
+                                    </div>
+                                ) : (() => {
+                                    const sorted = sortAsc ? [...stockHistory].reverse() : stockHistory;
+                                    // Header tabel
+                                    const colLabel = stockViewMode === 'kegiatan' ? 'Kegiatan' : 'Batch';
+                                    return (
+                                        <div>
+                                            {/* Header kolom */}
+                                            <div className="flex justify-between px-4 pb-2 border-b border-slate-200">
+                                                <span className="text-[11px] font-bold text-slate-700">{colLabel}</span>
+                                                <span className="text-[11px] font-bold text-slate-700">Total</span>
+                                            </div>
+                                            {/* Rows */}
+                                            <div>
+                                                {sorted.map((h, idx) => {
+                                                    const tgl = h.date ? (() => {
+                                                        try {
+                                                            let d;
+                                                            if (h.date?.toDate) d = h.date.toDate();
+                                                            else if (h.date?.seconds) d = new Date(h.date.seconds * 1000);
+                                                            else d = new Date(h.date);
+                                                            return d.toLocaleDateString('id-ID', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) + ' WIB';
+                                                        } catch { return String(h.date); }
+                                                    })() : '-';
+                                                    const batchLabel = h.batchNo ? `${h.batchNo}${h.exp ? ` (${h.exp})` : ''}` : '[tanpa-faktur]';
+                                                    const sign = h.type === 'masuk' ? '+' : '-';
+                                                    const signColor = h.type === 'masuk' ? 'text-emerald-600' : 'text-rose-500';
+                                                    const bgRow = idx % 2 === 1 ? 'bg-slate-50/70' : 'bg-white';
+
+                                                    if (stockViewMode === 'kegiatan') {
+                                                        // Susun keterangan berdasarkan tipe kegiatan
+                                                        let keteranganDisplay = null;
+                                                        if (h.activity === 'Beli') {
+                                                            keteranganDisplay = (
+                                                                <div>
+                                                                    {h.noFaktur && <p className="text-xs text-teal-600 font-semibold">{h.noFaktur}</p>}
+                                                                    {h.supplier && <p className="text-xs text-slate-600 font-medium">{h.supplier}</p>}
+                                                                    {!h.noFaktur && !h.supplier && <p className="text-xs text-slate-400">-</p>}
+                                                                </div>
+                                                            );
+                                                        } else if (h.activity === 'Stok opname') {
+                                                            keteranganDisplay = <p className="text-xs text-teal-600 font-semibold">{h.keterangan || 'Stok opname'}</p>;
+                                                        } else {
+                                                            // Jual — tampilkan no. transaksi
+                                                            keteranganDisplay = <p className="text-xs text-teal-600 font-semibold">{h.keterangan || '-'}</p>;
+                                                        }
+
+                                                        return (
+                                                            <div key={idx} className={`px-4 py-4 border-b border-slate-100 ${bgRow}`}>
+                                                                <div className="flex justify-between items-start mb-2">
+                                                                    <div>
+                                                                        <span className="text-[10px] text-slate-400">{idx + 1}&nbsp;&nbsp;{tgl}</span>
+                                                                        <p className="text-sm font-bold text-slate-800 mt-0.5">{h.activity || (h.type === 'masuk' ? 'Beli' : 'Jual')}</p>
+                                                                    </div>
+                                                                    <span className="text-sm font-bold text-slate-800">{h.totalAfter ?? '-'}</span>
+                                                                </div>
+                                                                <div className="grid grid-cols-2 gap-y-2 gap-x-4 mt-1">
+                                                                    <div>
+                                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">Batch</p>
+                                                                        <p className={`text-xs ${signColor} font-semibold`}>{sign}{h.qty} x {batchLabel}</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">{h.activity === 'Jual' ? 'Dijual oleh' : 'Oleh'}</p>
+                                                                        <p className="text-xs text-slate-700 font-semibold">{h.oleh || '-'}</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">Masuk/keluar</p>
+                                                                        <p className={`text-xs font-bold ${signColor}`}>{sign}{h.qty}</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">{h.activity === 'Beli' ? 'Faktur / Supplier' : 'Keterangan'}</p>
+                                                                        {keteranganDisplay}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    } else {
+                                                        // Per batch view
+                                                        return (
+                                                            <div key={idx} className={`px-4 py-4 border-b border-slate-100 ${bgRow}`}>
+                                                                <div className="flex justify-between items-start mb-2">
+                                                                    <div>
+                                                                        <span className="text-[10px] text-slate-400">{idx + 1}&nbsp;&nbsp;{tgl}</span>
+                                                                        <p className="text-sm font-bold text-slate-800 mt-0.5">{h.batchNo || '[tanpa-faktur]'}</p>
+                                                                        <p className="text-[10px] text-slate-400">ED {h.exp || '-'}</p>
+                                                                    </div>
+                                                                    <span className="text-sm font-bold text-slate-800">{h.totalAfter ?? '-'}</span>
+                                                                </div>
+                                                                <div className="grid grid-cols-2 gap-y-2 gap-x-4 mt-1">
+                                                                    <div>
+                                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">Tipe batch <span className="text-teal-500 cursor-help">?</span></p>
+                                                                        <p className="text-xs text-slate-700">Reguler</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">Oleh</p>
+                                                                        <p className="text-xs text-slate-700">{h.oleh || '-'}</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">Kegiatan</p>
+                                                                        <p className="text-xs text-slate-700">{h.activity || (h.type === 'masuk' ? 'Beli' : 'Jual')}</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">Masuk/keluar</p>
+                                                                        <p className={`text-xs font-bold ${signColor}`}>{sign}{h.qty}</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">Dari/ke</p>
+                                                                        <p className="text-xs text-slate-700">{h.supplier || '-'}</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">{h.activity === 'Beli' ? 'Faktur / Supplier' : 'Keterangan'}</p>
+                                                                        {h.activity === 'Beli' ? (
+                                                                            <div>
+                                                                                {h.noFaktur && <p className="text-xs text-teal-600 font-semibold">{h.noFaktur}</p>}
+                                                                                {h.supplier && <p className="text-xs text-slate-600 font-medium">{h.supplier}</p>}
+                                                                                {!h.noFaktur && !h.supplier && <p className="text-xs text-slate-400">-</p>}
+                                                                            </div>
+                                                                        ) : (
+                                                                            <p className="text-xs text-teal-600 font-semibold">{h.keterangan || '-'}</p>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        )}
+
+                    </div>
+                </div>
+            );
+        };
+
         const ListView = ({ items, searchQuery, setSearchQuery, onEdit, onDelete, onDeleteRack, showOnlyLowStock, setShowOnlyLowStock, selectedRacks, setSelectedRacks, uniqueRacksData, onCopySuccess, loading, settings, currentProfile, readOnly, isOwner }) => {
             const [isRackDropdownOpen, setIsRackDropdownOpen] = useState(false);
             const [rackSearch, setRackSearch] = useState('');
             const dropdownRef = useRef(null);
             const [noteModalItem, setNoteModalItem] = useState(null);
+            const [selectedDetailItem, setSelectedDetailItem] = useState(null);
             
             const ITEMS_PER_PAGE = 20;
             const [displayedLimit, setDisplayedLimit] = useState(ITEMS_PER_PAGE);
@@ -10508,6 +11152,22 @@
             const filteredRacks = uniqueRacksData.filter(r => r.name.toLowerCase().includes(rackSearch.toLowerCase()));
             const displayedItems = filteredItems.slice(0, displayedLimit);
 
+            if (selectedDetailItem) {
+                return (
+                    <ProductDetailPage
+                        item={selectedDetailItem}
+                        onBack={() => setSelectedDetailItem(null)}
+                        onEdit={onEdit}
+                        onDelete={onDelete}
+                        settings={settings}
+                        readOnly={readOnly}
+                        isOwner={isOwner}
+                        lowStockThreshold={settings.lowStockThreshold || DEFAULT_SETTINGS.lowStockThreshold}
+                        currentProfile={currentProfile}
+                    />
+                );
+            }
+
             return (
                 <div className="space-y-4 fade-in h-full flex flex-col relative z-10">
                     
@@ -10558,29 +11218,54 @@
                     </header>
                     <div className="relative group z-10"><input type="text" placeholder="Cari nama barang..." className="w-full pl-9 pr-3 py-3 rounded-xl border-0 bg-white/90 backdrop-blur-sm shadow-soft ring-1 ring-slate-100 outline-none transition-all placeholder:text-slate-400 font-medium text-sm focus:ring-2 focus:ring-sky-500" defaultValue={searchQuery} onChange={e => debouncedSetSearchQuery(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm transition-colors group-focus-within:text-slate-600" /></div>
                     <div className="flex-1 overflow-y-auto pb-32 pr-1 custom-scrollbar">
-                        {loading ? (<div className="flex flex-col items-center justify-center py-20"><div className="typing-dot bg-sky-500"></div><p className="text-xs text-slate-400 mt-2">Menghubungkan Database...</p></div>) : filteredItems.length === 0 ? (<div className="flex flex-col items-center justify-center py-20 opacity-40"><div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Icon name="box-open" className="text-2xl text-slate-400" /></div><p className="font-semibold text-slate-500 text-center text-sm">Tidak ada data</p></div>) : (<><div className="space-y-2">{displayedItems.map((item, index) => { const threshold = item.minStock ? safeNumber(item.minStock) : lowStockThreshold; const isLow = safeNumber(item.qty) < threshold; const isNew = isNewItem(item.createdAt); const animDelay = `${index * 50}ms`; const nameClass = searchQuery ? "type-effect-wrapper" : ""; const daysLeft = getDaysRemaining(item.exp); const isExpired = daysLeft !== null && daysLeft < 0; const isNearExp = daysLeft !== null && daysLeft < 90 && !isExpired; const expColor = isExpired ? 'text-red-600' : (isNearExp ? 'text-amber-600' : 'text-slate-400'); const expIcon = isExpired ? 'triangle-exclamation' : 'calendar-days'; return (<div key={item.id + searchQuery} style={{ animationDelay: animDelay }} className={`slide-up bg-white/90 backdrop-blur-sm rounded-xl p-3 border shadow-sm transition-all card-hover group flex items-center justify-between gap-3 ${isLow ? 'border-amber-200 bg-amber-50/30' : 'border-slate-100 hover:border-slate-300'}`}><div className="flex items-center gap-3 flex-1 min-w-0"><div className={`w-9 h-9 flex-shrink-0 rounded-lg flex items-center justify-center text-sm shadow-sm ${isLow ? 'bg-amber-100 text-amber-600' : 'bg-sky-50 text-sky-600'}`}><Icon name={isLow ? 'triangle-exclamation' : 'pills'} /></div><div className="min-w-0"><div className="flex items-start gap-2"><h4 className={`font-bold text-slate-800 text-xs leading-snug whitespace-normal break-words ${nameClass}`}>{item.name}</h4>{isNew && <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-sm animate-pulse shadow-sm flex-shrink-0 mt-0.5">NEW</span>}{item.isKonsinyasi && <span className="bg-fuchsia-100 text-fuchsia-700 text-[8px] font-black px-1.5 py-0.5 rounded-sm flex-shrink-0 mt-0.5 border border-fuchsia-200">konsinyasi</span>}</div><div className="mt-1 flex flex-col gap-0.5"><span className="inline-flex items-center gap-1 text-[9px] font-bold text-slate-400"><Icon name="location-dot" className="text-[8px]" /> {item.rack || '-'}</span>{item.exp && (<span className={`inline-flex items-center gap-1 text-[9px] font-bold ${expColor}`}><Icon name={expIcon} className="text-[8px]" /> {formatDateIndo(item.exp)}</span>)}
-                            {/* Rincian Stok Gabungan - Tampilan Baru Berbaris (Fixed for Truncate issue) */}
-                            {currentProfile.id === 'all_stores' && item._breakdown && item._breakdown.length > 0 && (
-                                <div className="mt-2 flex flex-col gap-1 w-full">
-                                    {item._breakdown.map((info, idx) => {
-                                        // Handle splitting carefully in case name has colon, though assuming safe split for now based on generation logic
-                                        const separatorIndex = info.lastIndexOf(':');
-                                        const storeName = info.substring(0, separatorIndex).trim();
-                                        const storeQty = info.substring(separatorIndex + 1).trim();
-                                        const isZero = parseInt(storeQty) === 0;
-
-                                        return (
-                                            <div key={idx} className="flex justify-between items-center text-[10px] bg-slate-50 border border-slate-200 px-2 py-1 rounded">
-                                                <span className="text-slate-500 font-medium mr-2 text-left">{storeName}</span>
-                                                <span className={`font-bold px-1.5 rounded border ${isZero ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-white text-slate-800 border-slate-100'}`}>{storeQty}</span>
-                                            </div>
-                                        );
-                                    })}
+                        {loading ? (<div className="flex flex-col items-center justify-center py-20"><div className="typing-dot bg-sky-500"></div><p className="text-xs text-slate-400 mt-2">Menghubungkan Database...</p></div>) : filteredItems.length === 0 ? (<div className="flex flex-col items-center justify-center py-20 opacity-40"><div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Icon name="box-open" className="text-2xl text-slate-400" /></div><p className="font-semibold text-slate-500 text-center text-sm">Tidak ada data</p></div>) : (<><div className="">{displayedItems.map((item, index) => { const threshold = item.minStock ? safeNumber(item.minStock) : lowStockThreshold; const isLow = safeNumber(item.qty) < threshold; const isNew = isNewItem(item.createdAt); const animDelay = `${index * 50}ms`; const nameClass = searchQuery ? "type-effect-wrapper" : ""; const daysLeft = getDaysRemaining(item.exp); const isExpired = daysLeft !== null && daysLeft < 0; const isNearExp = daysLeft !== null && daysLeft < 90 && !isExpired; const expColor = isExpired ? 'text-red-600' : (isNearExp ? 'text-amber-600' : 'text-slate-400'); const expIcon = isExpired ? 'triangle-exclamation' : 'calendar-days'; return (<div key={item.id + searchQuery} style={{ animationDelay: animDelay }} onClick={() => setSelectedDetailItem(item)} className={`slide-up border-b py-3.5 cursor-pointer hover:bg-slate-50 transition-colors active:bg-slate-100 ${isLow ? 'border-amber-100' : 'border-slate-100'}`}>
+                            <div className="flex items-start gap-2">
+                                <span className="text-xs font-semibold text-slate-800 mt-0.5 w-5 flex-shrink-0">{index + 1}</span>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        <h4 className={`font-bold text-sm leading-snug whitespace-normal break-words ${nameClass} ${isLow ? 'text-amber-700' : 'text-teal-700'}`}>{item.name}</h4>
+                                        {isNew && <span className="bg-rose-500 text-white text-[8px] font-black px-1 py-0.5 rounded-sm animate-pulse flex-shrink-0">NEW</span>}
+                                        {item.isKonsinyasi && <span className="bg-fuchsia-100 text-fuchsia-700 text-[8px] font-black px-1 py-0.5 rounded-sm flex-shrink-0 border border-fuchsia-200">konsinyasi</span>}
+                                        {isLow && <span className="text-[8px] font-black text-amber-600 bg-amber-50 px-1 py-0.5 rounded-sm border border-amber-200">Menipis</span>}
+                                    </div>
+                                    {/* Rak */}
+                                    {item.rack && item.rack !== '-' && <p className="text-xs text-slate-800 mt-0.5">{item.rack}</p>}
+                                    {/* Stok + exp */}
+                                    <p className="text-xs mt-0.5">
+                                        <span className={`font-semibold ${isLow ? 'text-amber-600' : 'text-slate-900'}`}>{item.qty} {item.unit || 'Pcs'}</span>
+                                        {item.exp && (<span className={`ml-1.5 ${expColor}`}><Icon name={expIcon} className="text-[8px] mr-0.5" />{formatDateIndo(item.exp)}</span>)}
+                                    </p>
+                                    {/* Grid 2 kolom: label bold kecil + nilai */}
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-2">
+                                        <div><p className="text-[10px] font-bold text-slate-900">Barcode</p><p className="text-xs text-slate-800">{item.barcode || '-'}</p></div>
+                                        <div><p className="text-[10px] font-bold text-slate-900">Kategori</p><p className="text-xs text-slate-800">{item.category || 'Reguler'}</p></div>
+                                        {safeNumber(item.costPrice) > 0 && (<div><p className="text-[10px] font-bold text-slate-900">Harga pokok</p><p className="text-xs text-slate-800">{formatRupiah(safeNumber(item.costPrice))}</p></div>)}
+                                        {safeNumber(item.price) > 0 && (<div><p className="text-[10px] font-bold text-slate-900">Harga jual</p><p className="text-xs text-slate-800">{formatRupiah(safeNumber(item.price))}</p></div>)}
+                                        {safeNumber(item.costPrice) > 0 && safeNumber(item.price) > 0 && (() => { const cost = safeNumber(item.costPrice); const sell = safeNumber(item.price); const markup = cost > 0 ? (((sell - cost) / cost) * 100).toFixed(2) + '%' : '-'; const margin = sell > 0 ? (((sell - cost) / sell) * 100).toFixed(2) + '%' : '-'; return (<><div><p className="text-[10px] font-bold text-slate-900">Markup</p><p className="text-xs text-slate-800">{markup}</p></div><div><p className="text-[10px] font-bold text-slate-900">Margin</p><p className="text-xs text-slate-800">{margin}</p></div></>); })()}
+                                    </div>
+                                    {/* Rincian stok gabungan */}
+                                    {currentProfile.id === 'all_stores' && item._breakdown && item._breakdown.length > 0 && (
+                                        <div className="mt-1.5 flex flex-col gap-0.5 w-full">
+                                            {item._breakdown.map((info, idx) => {
+                                                const separatorIndex = info.lastIndexOf(':');
+                                                const storeName = info.substring(0, separatorIndex).trim();
+                                                const storeQty = info.substring(separatorIndex + 1).trim();
+                                                const isZero = parseInt(storeQty) === 0;
+                                                return (<div key={idx} className="flex justify-between items-center text-[10px]"><span className={isZero ? 'text-slate-400' : 'text-slate-600'}>{storeName}</span><span className={`font-semibold ${isZero ? 'text-slate-400' : 'text-slate-700'}`}>{storeQty}</span></div>);
+                                            })}
+                                        </div>
+                                    )}
+                                    {/* Tombol aksi */}
+                                    <div className="flex items-center gap-3 mt-1.5" onClick={e => e.stopPropagation()}>
+                                        {settings?.showNoteButton !== false && <button onClick={() => setNoteModalItem(item)} className={`flex items-center gap-1 text-xs font-semibold transition-colors ${item.itemNote ? 'text-teal-600 hover:text-teal-800' : 'text-slate-400 hover:text-teal-600'}`}><Icon name="circle-info" /><span>Catatan</span></button>}
+                                        {!readOnly && <button onClick={() => onDelete(item)} className="flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-red-500 transition-colors ml-auto"><Icon name="trash" /></button>}
+                                        {!readOnly && <button onClick={() => onEdit(item)} className="flex items-center gap-1 text-xs font-semibold text-teal-600 hover:text-teal-800 transition-colors"><Icon name="pen" /><span>Edit barang</span></button>}
+                                    </div>
                                 </div>
-                            )}
-                        </div></div></div><div className="flex items-center gap-4 md:gap-8 flex-shrink-0"><div className="text-right"><p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Stok</p><div className="flex items-baseline justify-end gap-1"><span className={`text-sm font-black ${isLow ? 'text-amber-600' : 'text-slate-800'}`}>{item.qty}</span><span className="text-[9px] font-semibold text-slate-500">{item.unit || 'Pcs'}</span></div>
-                            {/* Display Price */}
-                            {item.price > 0 && <div className="text-[10px] text-green-600 font-bold mt-0.5 bg-green-50 px-1.5 rounded-md inline-block">{formatRupiah(item.price)}</div>}</div></div><div className="flex gap-1.5 flex-shrink-0 pl-2 border-l border-slate-100 ml-1">{settings?.showNoteButton !== false && <button onClick={() => setNoteModalItem(item)} title={item.itemNote ? "Lihat catatan" : "Tambah catatan"} className={`w-7 h-7 rounded-lg text-[10px] border transition-colors flex items-center justify-center ${item.itemNote ? 'bg-sky-50 text-sky-500 hover:bg-sky-100 border-sky-200' : 'bg-white text-slate-300 hover:bg-slate-50 hover:text-sky-400 border-slate-200'}`}><Icon name="circle-info" /></button>}{!readOnly && <button onClick={() => onEdit(item)} className="w-7 h-7 rounded-lg text-[10px] bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800 border border-slate-200 transition-colors flex items-center justify-center"><Icon name="pen" /></button>}{!readOnly && <button onClick={() => onDelete(item)} className="w-7 h-7 rounded-lg text-[10px] bg-white text-slate-400 hover:bg-red-50 hover:text-red-500 border border-slate-200 hover:border-red-200 transition-colors flex items-center justify-center"><Icon name="trash" /></button>}</div></div>); })}</div><div ref={loaderRef} className="h-10 flex items-center justify-center w-full mt-4 pb-20 md:pb-0">{displayedLimit < filteredItems.length ? (<div className="flex items-center gap-2 text-slate-400 text-xs"><div className="w-4 h-4 border-2 border-slate-300 border-t-sky-500 rounded-full animate-spin"></div><span>Memuat...</span></div>) : filteredItems.length > 0 && ( <span className="text-[10px] text-slate-300">Semua data ditampilkan</span> )}</div></>)}
+                                <Icon name="chevron-right" className="text-slate-300 text-xs mt-1 flex-shrink-0" />
+                            </div>
+                        </div>
+                        ); })}</div><div ref={loaderRef} className="h-10 flex items-center justify-center w-full mt-4 pb-20 md:pb-0">{displayedLimit < filteredItems.length ? (<div className="flex items-center gap-2 text-slate-400 text-xs"><div className="w-4 h-4 border-2 border-slate-300 border-t-sky-500 rounded-full animate-spin"></div><span>Memuat...</span></div>) : filteredItems.length > 0 && ( <span className="text-[10px] text-slate-300">Semua data ditampilkan</span> )}</div></>)}
                     </div>
                     {noteModalItem && <ItemNoteModal item={noteModalItem} onClose={() => setNoteModalItem(null)} canEdit={settings?.noteEditAccess !== 'owner_only' || isOwner} />}
                 </div>
@@ -15131,7 +15816,8 @@
                         defaultDiscount: formData.defaultDiscount ? safeNumber(formData.defaultDiscount) : 0,
                         defaultDiscountType: formData.defaultDiscountType || '%',
                         packagePrices: (formData.packagePrices || []).filter(p => p.name && p.qty > 0 && p.price > 0),
-                        updatedAt: window.serverTimestamp()
+                        updatedAt: window.serverTimestamp(),
+                        updatedBy: authSession?.namaLengkap || authSession?.username || 'Pengguna'
                     };
                     const stockUpdate = { [`stocks.${activeStoreId}`]: newQty };
 
@@ -15142,6 +15828,22 @@
                         const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', editingItem.id);
                         await window.updateDoc(docRef, { ...baseData, ...stockUpdate }); 
                         savedItemId = editingItem.id;
+                        // 📝 Simpan riwayat harga jika harga berubah
+                        const oldPrice = safeNumber(editingItem.price);
+                        const newPrice = safeNumber(formData.price);
+                        if (newPrice !== oldPrice || !editingItem.price) {
+                            try {
+                                await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'priceHistory'), {
+                                    itemId: editingItem.id,
+                                    itemName: formData.name,
+                                    oldPrice: oldPrice,
+                                    newPrice: newPrice,
+                                    changedBy: authSession?.namaLengkap || authSession?.username || 'Pengguna',
+                                    changedAt: window.serverTimestamp(),
+                                    source: 'manual',
+                                });
+                            } catch (phErr) { console.warn('Gagal simpan riwayat harga:', phErr); }
+                        }
                         showToast(`Stok untuk ${currentProfile.name} diperbarui`);
                     } else {
                         const existingItem = rawInventory.find(i => i.name.toLowerCase() === formData.name.toLowerCase());
@@ -15149,10 +15851,41 @@
                              const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', existingItem.id);
                              await window.updateDoc(docRef, { ...baseData, ...stockUpdate });
                              savedItemId = existingItem.id;
+                             // 📝 Simpan riwayat harga
+                             const oldPrice2 = safeNumber(existingItem.price);
+                             const newPrice2 = safeNumber(formData.price);
+                             if (newPrice2 !== oldPrice2) {
+                                 try {
+                                     await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'priceHistory'), {
+                                         itemId: existingItem.id,
+                                         itemName: formData.name,
+                                         oldPrice: oldPrice2,
+                                         newPrice: newPrice2,
+                                         changedBy: authSession?.namaLengkap || authSession?.username || 'Pengguna',
+                                         changedAt: window.serverTimestamp(),
+                                         source: 'manual',
+                                     });
+                                 } catch (phErr) { console.warn('Gagal simpan riwayat harga:', phErr); }
+                             }
                              showToast(`Barang sudah ada. Stok ${currentProfile.name} diupdate.`);
                         } else {
                             const newDoc = await window.addDoc(collectionRef, { ...baseData, stocks: { [activeStoreId]: newQty }, qty: newQty, createdAt: window.serverTimestamp() }); 
                             savedItemId = newDoc.id;
+                            // 📝 Simpan riwayat harga pertama kali
+                            const firstPrice = safeNumber(formData.price);
+                            if (firstPrice > 0) {
+                                try {
+                                    await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'priceHistory'), {
+                                        itemId: newDoc.id,
+                                        itemName: formData.name,
+                                        oldPrice: 0,
+                                        newPrice: firstPrice,
+                                        changedBy: authSession?.namaLengkap || authSession?.username || 'Pengguna',
+                                        changedAt: window.serverTimestamp(),
+                                        source: 'manual',
+                                    });
+                                } catch (phErr) { console.warn('Gagal simpan riwayat harga:', phErr); }
+                            }
                             showToast("Barang baru ditambahkan");
                         }
                     }
