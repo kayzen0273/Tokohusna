@@ -272,6 +272,7 @@
         @keyframes expBannerOut { from { transform: translateY(0);     opacity: 1; } to { transform: translateY(-110%); opacity: 0; } }
         .exp-banner-enter { animation: expBannerIn  0.45s cubic-bezier(0.16,1,0.3,1) forwards; }
         .exp-banner-exit  { animation: expBannerOut 0.4s  ease-in            forwards; }
+        body.filter-panel-open .mobile-topbar { display: none !important; }
     </style>
 </head>
 <body class="relative">
@@ -11097,6 +11098,88 @@
             const [noteModalItem, setNoteModalItem] = useState(null);
             const [selectedDetailItem, setSelectedDetailItem] = useState(null);
             const [detailInitialTab, setDetailInitialTab] = useState(null);
+            const [sortBy, setSortBy] = useState('az');
+            const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
+            const [showFilterPanel, setShowFilterPanel] = useState(false);
+            const [localSearch, setLocalSearch] = useState(searchQuery);
+            const sortDropdownRef = useRef(null);
+
+            // Sembunyikan header mobile saat filter panel terbuka
+            useEffect(() => {
+                if (showFilterPanel) {
+                    document.body.classList.add('filter-panel-open');
+                } else {
+                    document.body.classList.remove('filter-panel-open');
+                }
+                return () => document.body.classList.remove('filter-panel-open');
+            }, [showFilterPanel]);
+
+            // Filter states (applied)
+            const [filterMarginPresets, setFilterMarginPresets] = useState([]);
+            const [filterMarkupPresets, setFilterMarkupPresets] = useState([]);
+            const [filterDiskonSelected, setFilterDiskonSelected] = useState([]);
+            const [filterKategoriSelected, setFilterKategoriSelected] = useState([]);
+            const [filterGolonganSelected, setFilterGolonganSelected] = useState([]);
+            const [filterBarcodeSelected, setFilterBarcodeSelected] = useState([]);
+            // Temp filter states (pending)
+            const [tmpMarginSelected, setTmpMarginSelected] = useState([]);
+            const [tmpMarkupSelected, setTmpMarkupSelected] = useState([]);
+            const [tmpDiskonSelected, setTmpDiskonSelected] = useState([]);
+            const [tmpKategoriSelected, setTmpKategoriSelected] = useState([]);
+            const [tmpGolonganSelected, setTmpGolonganSelected] = useState([]);
+            const [tmpBarcodeSelected, setTmpBarcodeSelected] = useState([]);
+            const [activeFilterEdit, setActiveFilterEdit] = useState(null);
+            const [filterSubPage, setFilterSubPage] = useState(null);
+
+            const MARGIN_PRESETS = [
+                { value: 'semua',   label: 'Margin'              },
+                { value: 'unknown', label: 'Tak diketahui'       },
+                { value: 'lt10',    label: '<10% (Sangat rendah)'},
+                { value: '10to20',  label: '10% – <20% (Rendah)'},
+                { value: '20to25',  label: '20% – 25% (Sehat)'  },
+                { value: '25to35',  label: '>25% – 35% (Tinggi)'},
+                { value: 'gt35',    label: '>35% (Sangat tinggi)'},
+            ];
+            const MARKUP_PRESETS = [
+                { value: 'semua',   label: 'Markup'              },
+                { value: 'unknown', label: 'Tak diketahui'       },
+                { value: 'lt10',    label: '<10% (Sangat rendah)'},
+                { value: '10to20',  label: '10% – <20% (Rendah)'},
+                { value: '20to25',  label: '20% – 25% (Sehat)'  },
+                { value: '25to35',  label: '>25% – 35% (Tinggi)'},
+                { value: 'gt35',    label: '>35% (Sangat tinggi)'},
+            ];
+            const KATEGORI_PRESETS = [
+                { value: 'semua',       label: 'Kategori'      },
+                { value: 'Prekursor',   label: 'Prekursor'     },
+                { value: 'OOT',         label: 'OOT'           },
+                { value: 'Reguler',     label: 'Reguler'       },
+                { value: 'Narkotika',   label: 'Narkotika'     },
+                { value: 'Psikotropika',label: 'Psikotropika'  },
+                { value: 'Alat kesehatan', label: 'Alat kesehatan' },
+                { value: 'Lainnya',     label: 'Lainnya'       },
+            ];
+            const DISKON_PRESETS = [
+                { value: 'semua',      label: 'Diskon'                      },
+                { value: 'tidak',      label: 'Tanpa diskon'                },
+                { value: 'ada',        label: 'Dengan diskon'               },
+                { value: 'lebih',      label: 'Diskon lebih dari harga jual'},
+            ];
+            const BARCODE_PRESETS = [
+                { value: 'semua', label: 'Barcode'          },
+                { value: 'tidak', label: 'Tidak ada barcode'},
+                { value: 'ada',   label: 'Ada barcode'      },
+            ];
+            const matchPreset = (preset, val, sell, cost) => {
+                if (preset === 'unknown') return sell === 0 || cost === 0;
+                if (preset === 'lt10')   return val < 10;
+                if (preset === '10to20') return val >= 10 && val < 20;
+                if (preset === '20to25') return val >= 20 && val <= 25;
+                if (preset === '25to35') return val > 25 && val <= 35;
+                if (preset === 'gt35')   return val > 35;
+                return true;
+            };
+            const togglePreset = (arr, val) => arr.includes(val) ? arr.filter(v => v !== val) : [...arr, val];
 
             // Kembali ke product detail setelah navigasi dari detail faktur
             useEffect(() => {
@@ -11113,7 +11196,10 @@
             const lowStockThreshold = settings.lowStockThreshold || DEFAULT_SETTINGS.lowStockThreshold;
 
             useEffect(() => {
-                const handleClickOutside = (event) => { if (dropdownRef.current && !dropdownRef.current.contains(event.target)) { setIsRackDropdownOpen(false); } };
+                const handleClickOutside = (event) => {
+                    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) { setIsRackDropdownOpen(false); }
+                    if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target)) { setIsSortDropdownOpen(false); }
+                };
                 document.addEventListener("mousedown", handleClickOutside); return () => document.removeEventListener("mousedown", handleClickOutside);
             }, []);
 
@@ -11122,16 +11208,53 @@
             const filteredItems = useMemo(() => {
                 let result = items;
                 if (searchQuery) { result = fuse.search(searchQuery).map(({ item }) => item); }
-                return result.filter(i => {
+                result = result.filter(i => {
                     const threshold = i.minStock ? safeNumber(i.minStock) : lowStockThreshold;
                     const matchesLowStock = showOnlyLowStock ? safeNumber(i.qty) < threshold : true;
                     let matchesRack = true;
                     if (selectedRacks.length > 0) { const itemRackLower = (i.rack || '-').toLowerCase(); matchesRack = selectedRacks.some(selected => itemRackLower.includes(selected.toLowerCase())); }
-                    return matchesLowStock && matchesRack;
+                    // Margin & Markup filter
+                    const sell = safeNumber(i.price); const cost = safeNumber(i.costPrice);
+                    const margin = sell > 0 ? ((sell - cost) / sell) * 100 : 0;
+                    const markup = cost > 0 ? ((sell - cost) / cost) * 100 : 0;
+                    const matchMargin = filterMarginPresets.length === 0 || filterMarginPresets.length === 6 ? true : filterMarginPresets.some(p => matchPreset(p, margin, sell, cost));
+                    const matchMarkup = filterMarkupPresets.length === 0 || filterMarkupPresets.length === 6 ? true : filterMarkupPresets.some(p => matchPreset(p, markup, sell, cost));
+                    const matchDiskon = filterDiskonSelected.length === 0 || filterDiskonSelected.length === 3 ? true : filterDiskonSelected.some(v => {
+                        if (v === 'tidak') return safeNumber(i.discount) === 0 || !i.discount;
+                        if (v === 'ada')   return safeNumber(i.discount) > 0;
+                        if (v === 'lebih') return safeNumber(i.discount) > safeNumber(i.price);
+                        return true;
+                    });
+                    const matchKategori = filterKategoriSelected.length === 0 ? true : filterKategoriSelected.some(v => (i.category || '').toLowerCase() === v.toLowerCase());
+                    const matchGolongan = filterGolonganSelected.length === 0 ? true : filterGolonganSelected.some(v => (i.rack || '').split(',').map(r => r.trim()).includes(v));
+                    const matchBarcode = filterBarcodeSelected.length === 0 || filterBarcodeSelected.length === 2 ? true : filterBarcodeSelected.some(v => {
+                        const hasBarcode = !!(i.barcode && i.barcode !== '-');
+                        if (v === 'ada')   return hasBarcode;
+                        if (v === 'tidak') return !hasBarcode;
+                        return true;
+                    });
+                    return matchesLowStock && matchesRack && matchMargin && matchMarkup && matchDiskon && matchKategori && matchGolongan && matchBarcode;
                 });
-            }, [items, searchQuery, showOnlyLowStock, selectedRacks, fuse, lowStockThreshold]);
+                result = [...result];
+                if (sortBy === 'az') result.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'id'));
+                else if (sortBy === 'za') result.sort((a, b) => (b.name || '').localeCompare(a.name || '', 'id'));
+                else if (sortBy === 'stok_asc') result.sort((a, b) => safeNumber(a.qty) - safeNumber(b.qty));
+                else if (sortBy === 'stok_desc') result.sort((a, b) => safeNumber(b.qty) - safeNumber(a.qty));
+                else if (sortBy === 'satuan_az') result.sort((a, b) => (a.unit || '').localeCompare(b.unit || '', 'id'));
+                else if (sortBy === 'satuan_za') result.sort((a, b) => (b.unit || '').localeCompare(a.unit || '', 'id'));
+                else if (sortBy === 'hpp_asc') result.sort((a, b) => safeNumber(a.costPrice) - safeNumber(b.costPrice));
+                else if (sortBy === 'hpp_desc') result.sort((a, b) => safeNumber(b.costPrice) - safeNumber(a.costPrice));
+                else if (sortBy === 'hj_asc') result.sort((a, b) => safeNumber(a.price) - safeNumber(b.price));
+                else if (sortBy === 'hj_desc') result.sort((a, b) => safeNumber(b.price) - safeNumber(a.price));
+                else if (sortBy === 'margin_asc') result.sort((a, b) => { const mA = safeNumber(a.price) > 0 ? (safeNumber(a.price) - safeNumber(a.costPrice)) / safeNumber(a.price) : 0; const mB = safeNumber(b.price) > 0 ? (safeNumber(b.price) - safeNumber(b.costPrice)) / safeNumber(b.price) : 0; return mA - mB; });
+                else if (sortBy === 'margin_desc') result.sort((a, b) => { const mA = safeNumber(a.price) > 0 ? (safeNumber(a.price) - safeNumber(a.costPrice)) / safeNumber(a.price) : 0; const mB = safeNumber(b.price) > 0 ? (safeNumber(b.price) - safeNumber(b.costPrice)) / safeNumber(b.price) : 0; return mB - mA; });
+                else if (sortBy === 'markup_asc') result.sort((a, b) => { const mA = safeNumber(a.costPrice) > 0 ? (safeNumber(a.price) - safeNumber(a.costPrice)) / safeNumber(a.costPrice) : 0; const mB = safeNumber(b.costPrice) > 0 ? (safeNumber(b.price) - safeNumber(b.costPrice)) / safeNumber(b.costPrice) : 0; return mA - mB; });
+                else if (sortBy === 'markup_desc') result.sort((a, b) => { const mA = safeNumber(a.costPrice) > 0 ? (safeNumber(a.price) - safeNumber(a.costPrice)) / safeNumber(a.costPrice) : 0; const mB = safeNumber(b.costPrice) > 0 ? (safeNumber(b.price) - safeNumber(b.costPrice)) / safeNumber(b.costPrice) : 0; return mB - mA; });
+                return result;
+            }, [items, searchQuery, showOnlyLowStock, selectedRacks, fuse, lowStockThreshold, sortBy, filterMarginPresets, filterMarkupPresets, filterDiskonSelected, filterKategoriSelected, filterGolonganSelected, filterBarcodeSelected]);
 
             useEffect(() => { setDisplayedLimit(ITEMS_PER_PAGE); }, [searchQuery, showOnlyLowStock, selectedRacks]);
+            useEffect(() => { setLocalSearch(searchQuery); }, [searchQuery]);
 
             useEffect(() => {
                 const observer = new IntersectionObserver((entries) => { const target = entries[0]; if (target.isIntersecting && displayedLimit < filteredItems.length) { setDisplayedLimit(prev => Math.min(prev + ITEMS_PER_PAGE, filteredItems.length + ITEMS_PER_PAGE)); } }, { root: null, rootMargin: "100px", threshold: 0.1 });
@@ -11308,29 +11431,280 @@
                                 Export Excel
                             </button>
                             )}
-                            
-                            <button onClick={() => setShowOnlyLowStock(!showOnlyLowStock)} className={`py-2.5 px-3.5 rounded-xl font-bold text-[10px] sm:text-xs flex items-center justify-center gap-2 transition-all border shadow-sm whitespace-nowrap ${showOnlyLowStock ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                                <Icon name="filter" className="text-sm" />
-                                {showOnlyLowStock ? 'Reset Filter' : 'Stok Menipis'}
-                            </button>
-                            
-                            <div className="relative min-w-0" ref={dropdownRef}>
-                                <button onClick={() => setIsRackDropdownOpen(!isRackDropdownOpen)} className={`w-full py-2.5 px-3.5 rounded-xl border border-slate-200 bg-white text-[10px] sm:text-xs font-bold text-slate-700 shadow-sm flex items-center justify-between transition-all hover:bg-slate-50 ${isRackDropdownOpen ? 'ring-2 ring-sky-400' : ''}`}>
-                                    <span className="truncate flex-1 text-left">{getRackLabel()}</span>
-                                    <Icon name="chevron-down" className={`text-xs text-slate-400 ml-2 transition-transform flex-shrink-0 ${isRackDropdownOpen ? 'rotate-180' : ''}`} />
+
+                            {/* Stok Menipis + Rak dalam satu baris */}
+                            <div className="col-span-2 sm:col-span-2 flex gap-2">
+                                <button onClick={() => setShowOnlyLowStock(!showOnlyLowStock)} className={`flex-shrink-0 py-2.5 px-3.5 rounded-xl font-bold text-[10px] sm:text-xs flex items-center justify-center gap-2 transition-all border shadow-sm whitespace-nowrap ${showOnlyLowStock ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                    <Icon name="triangle-exclamation" className="text-sm" />
+                                    {showOnlyLowStock ? 'Reset' : 'Stok Menipis'}
                                 </button>
-                                {isRackDropdownOpen && (<div className="absolute top-full left-0 sm:right-0 sm:left-auto mt-2 w-full sm:w-[280px] md:w-72 bg-white rounded-xl shadow-2xl border border-slate-100 z-[60] overflow-hidden fade-in origin-top"><div className="p-3 border-b border-slate-50 sticky top-0 bg-white z-10"><div className="relative mb-2"><input autoFocus type="text" placeholder="Cari rak..." className="w-full pl-8 pr-8 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-sky-100 focus:border-sky-400 outline-none transition-all" value={rackSearch} onChange={(e) => setRackSearch(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />{rackSearch && (<button onClick={() => setRackSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"><Icon name="xmark" className="text-[10px]" /></button>)}</div><button onClick={() => setSelectedRacks([])} className="w-full py-1.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">Reset (Tampilkan Semua)</button></div><div className="max-h-[240px] overflow-y-auto custom-scrollbar p-1.5 space-y-0.5">{filteredRacks.map(rack => { const isSelected = selectedRacks.includes(rack.name); return (<div key={rack.name} onClick={() => toggleRack(rack.name)} className={`group w-full text-left px-3 py-2.5 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer ${isSelected ? 'bg-sky-50/60' : ''}`}><div className="flex items-center gap-3 truncate flex-1"><div className="relative w-4 h-4 flex-shrink-0"><input type="checkbox" checked={isSelected} readOnly className="peer appearance-none w-4 h-4 border-2 border-slate-300 rounded checked:bg-sky-500 checked:border-sky-500 transition-all cursor-pointer" /><Icon name="check" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] text-white opacity-0 peer-checked:opacity-100 pointer-events-none transition-opacity" /></div><span className="truncate flex-1">{rack.name}</span></div><div className="flex items-center gap-2">{rack.hasNew && (<span className="flex-shrink-0 bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-sm animate-pulse">NEW</span>)}<button onClick={(e) => { e.stopPropagation(); onDeleteRack(rack.name); }} className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100" title="Hapus Rak"><Icon name="trash-can" /></button></div></div>); })}{filteredRacks.length === 0 && (<div className="flex flex-col items-center justify-center py-6 text-slate-400"><Icon name="box-open" className="text-xl mb-1 opacity-50" /><p className="text-[10px]">Rak tidak ditemukan</p></div>)}</div></div>)}
+                                <div className="relative flex-1 min-w-0" ref={dropdownRef}>
+                                    <button onClick={() => setIsRackDropdownOpen(!isRackDropdownOpen)} className={`w-full py-2.5 px-3.5 rounded-xl border border-slate-200 bg-white text-[10px] sm:text-xs font-bold text-slate-700 shadow-sm flex items-center justify-between transition-all hover:bg-slate-50 ${isRackDropdownOpen ? 'ring-2 ring-sky-400' : ''}`}>
+                                        <span className="truncate flex-1 text-left">{getRackLabel()}</span>
+                                        <Icon name="chevron-down" className={`text-xs text-slate-400 ml-2 transition-transform flex-shrink-0 ${isRackDropdownOpen ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    {isRackDropdownOpen && (<div className="absolute top-full left-0 sm:right-0 sm:left-auto mt-2 w-full sm:w-[280px] md:w-72 bg-white rounded-xl shadow-2xl border border-slate-100 z-[60] overflow-hidden fade-in origin-top"><div className="p-3 border-b border-slate-50 sticky top-0 bg-white z-10"><div className="relative mb-2"><input autoFocus type="text" placeholder="Cari rak..." className="w-full pl-8 pr-8 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-sky-100 focus:border-sky-400 outline-none transition-all" value={rackSearch} onChange={(e) => setRackSearch(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />{rackSearch && (<button onClick={() => setRackSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"><Icon name="xmark" className="text-[10px]" /></button>)}</div><button onClick={() => setSelectedRacks([])} className="w-full py-1.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">Reset (Tampilkan Semua)</button></div><div className="max-h-[240px] overflow-y-auto custom-scrollbar p-1.5 space-y-0.5">{filteredRacks.map(rack => { const isSelected = selectedRacks.includes(rack.name); return (<div key={rack.name} onClick={() => toggleRack(rack.name)} className={`group w-full text-left px-3 py-2.5 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer ${isSelected ? 'bg-sky-50/60' : ''}`}><div className="flex items-center gap-3 truncate flex-1"><div className="relative w-4 h-4 flex-shrink-0"><input type="checkbox" checked={isSelected} readOnly className="peer appearance-none w-4 h-4 border-2 border-slate-300 rounded checked:bg-sky-500 checked:border-sky-500 transition-all cursor-pointer" /><Icon name="check" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] text-white opacity-0 peer-checked:opacity-100 pointer-events-none transition-opacity" /></div><span className="truncate flex-1">{rack.name}</span></div><div className="flex items-center gap-2">{rack.hasNew && (<span className="flex-shrink-0 bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-sm animate-pulse">NEW</span>)}<button onClick={(e) => { e.stopPropagation(); onDeleteRack(rack.name); }} className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100" title="Hapus Rak"><Icon name="trash-can" /></button></div></div>); })}{filteredRacks.length === 0 && (<div className="flex flex-col items-center justify-center py-6 text-slate-400"><Icon name="box-open" className="text-xl mb-1 opacity-50" /><p className="text-[10px]">Rak tidak ditemukan</p></div>)}</div></div>)}
+                                </div>
                             </div>
-                            
-                            {selectedRacks.length > 0 && (
-                                <button onClick={() => setSelectedRacks([])} className="col-span-2 sm:col-span-1 py-2.5 px-3.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200 whitespace-nowrap shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2">
-                                    <Icon name="xmark" className="text-sm" />
-                                    Reset Rak
-                                </button>
-                            )}
                         </div>
                     </header>
-                    <div className="relative group z-10"><input type="text" placeholder="Cari nama barang..." className="w-full pl-9 pr-3 py-3 rounded-xl border-0 bg-white/90 backdrop-blur-sm shadow-soft ring-1 ring-slate-100 outline-none transition-all placeholder:text-slate-400 font-medium text-sm focus:ring-2 focus:ring-sky-500" defaultValue={searchQuery} onChange={e => debouncedSetSearchQuery(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm transition-colors group-focus-within:text-slate-600" /></div>
+                    {/* Search Bar - Farmacare Style */}
+                    <div className="flex gap-2 items-center">
+                        <div className="relative flex-1 flex items-center border border-slate-200 rounded-xl bg-white overflow-hidden shadow-sm focus-within:border-teal-400 focus-within:ring-2 focus-within:ring-teal-100 transition-all">
+                            <Icon name="magnifying-glass" className="absolute left-3.5 text-teal-500 text-sm pointer-events-none" />
+                            <input type="text" placeholder="Cari barang" className="flex-1 pl-9 pr-3 py-2.5 bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400" value={localSearch} onChange={e => setLocalSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') setSearchQuery(localSearch); }} />
+                            {localSearch && <button onClick={() => { setLocalSearch(''); setSearchQuery(''); }} className="px-2 text-slate-400 hover:text-slate-600"><Icon name="xmark" className="text-xs" /></button>}
+                        </div>
+                        <button onClick={() => setSearchQuery(localSearch)} className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-sm font-bold transition-all shadow-sm flex-shrink-0">Cari</button>
+                    </div>
+                    {/* Filter & Sort Row */}
+                    <div className="flex gap-2">
+                        {(() => {
+                            const activeCount = [filterMarginPresets.length > 0, filterMarkupPresets.length > 0, filterDiskonSelected.length > 0, filterKategoriSelected.length > 0, filterGolonganSelected.length > 0, filterBarcodeSelected.length > 0].filter(Boolean).length;
+                            return (
+                                <button onClick={() => { setTmpMarginSelected([...filterMarginPresets]); setTmpMarkupSelected([...filterMarkupPresets]); setTmpDiskonSelected([...filterDiskonSelected]); setTmpKategoriSelected([...filterKategoriSelected]); setTmpGolonganSelected([...filterGolonganSelected]); setTmpBarcodeSelected([...filterBarcodeSelected]); setActiveFilterEdit(null); setFilterSubPage(null); setShowFilterPanel(true); }} className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all shadow-sm ${activeCount > 0 ? 'bg-teal-50 border-teal-300 text-teal-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                    <Icon name="sliders" className="text-sm" />
+                                    <span>Filter</span>
+                                    {activeCount > 0 && <span className="bg-teal-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">{activeCount}</span>}
+                                </button>
+                            );
+                        })()}
+                        <div className="relative flex-1" ref={sortDropdownRef}>
+                            <button onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)} className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all shadow-sm ${isSortDropdownOpen ? 'bg-teal-50 border-teal-300 text-teal-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                <Icon name="arrow-down-up-across-line" className="text-sm" />
+                                <span className="truncate">{sortBy === 'az' ? 'Nama dari A-Z' : sortBy === 'za' ? 'Nama dari Z-A' : sortBy === 'stok_asc' ? 'Stok tersedikit' : sortBy === 'stok_desc' ? 'Stok terbanyak' : sortBy === 'satuan_az' ? 'Satuan A-Z' : sortBy === 'satuan_za' ? 'Satuan Z-A' : sortBy === 'hpp_asc' ? 'H. Pokok terkecil' : sortBy === 'hpp_desc' ? 'H. Pokok terbesar' : sortBy === 'hj_asc' ? 'H. Jual terkecil' : sortBy === 'hj_desc' ? 'H. Jual terbesar' : sortBy === 'margin_asc' ? 'Margin terkecil' : sortBy === 'margin_desc' ? 'Margin terbesar' : sortBy === 'markup_asc' ? 'Markup terkecil' : 'Markup terbesar'}</span>
+                                <Icon name="chevron-down" className={`text-[10px] text-slate-400 flex-shrink-0 transition-transform ${isSortDropdownOpen ? 'rotate-180' : ''}`} />
+                            </button>
+                            {isSortDropdownOpen && (
+                                <div className="absolute top-full left-0 right-0 mt-1.5 bg-white rounded-xl shadow-2xl border border-slate-100 z-[70] overflow-hidden fade-in" style={{maxHeight: '260px', overflowY: 'auto'}}>
+                                    {[
+                                        { value: 'az', label: 'Nama dari A-Z', icon: 'arrow-down-a-z' },
+                                        { value: 'za', label: 'Nama dari Z-A', icon: 'arrow-down-z-a' },
+                                        { value: 'stok_asc', label: 'Stok tersedikit', icon: 'arrow-up-1-9' },
+                                        { value: 'stok_desc', label: 'Stok terbanyak', icon: 'arrow-down-9-1' },
+                                        { value: 'satuan_az', label: 'Urut satuan A-Z', icon: 'arrow-down-a-z' },
+                                        { value: 'satuan_za', label: 'Urut satuan Z-A', icon: 'arrow-down-z-a' },
+                                        { value: 'hpp_asc', label: 'Harga pokok terkecil', icon: 'arrow-up-1-9' },
+                                        { value: 'hpp_desc', label: 'Harga pokok terbesar', icon: 'arrow-down-9-1' },
+                                        { value: 'hj_asc', label: 'Harga jual terkecil', icon: 'arrow-up-1-9' },
+                                        { value: 'hj_desc', label: 'Harga jual terbesar', icon: 'arrow-down-9-1' },
+                                        { value: 'margin_asc', label: 'Margin terkecil', icon: 'arrow-up-1-9' },
+                                        { value: 'margin_desc', label: 'Margin terbesar', icon: 'arrow-down-9-1' },
+                                        { value: 'markup_asc', label: 'Markup terkecil', icon: 'arrow-up-1-9' },
+                                        { value: 'markup_desc', label: 'Markup terbesar', icon: 'arrow-down-9-1' },
+                                    ].map(opt => (
+                                        <button key={opt.value} onClick={() => { setSortBy(opt.value); setIsSortDropdownOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-medium transition-colors text-left ${sortBy === opt.value ? 'bg-teal-50 text-teal-700 font-bold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                                            <Icon name={opt.icon} className="w-4 text-center flex-shrink-0" />
+                                            <span>{opt.label}</span>
+                                            {sortBy === opt.value && <Icon name="check" className="ml-auto text-teal-600 text-xs" />}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    {/* Active Filter Tags */}
+                    {(() => {
+                        const allTags = [
+                            ...filterMarginPresets.map(v => ({ key: 'margin-'+v, label: 'Margin', value: MARGIN_PRESETS.find(p=>p.value===v)?.label || v, onRemove: () => setFilterMarginPresets(filterMarginPresets.filter(x=>x!==v)) })),
+                            ...filterMarkupPresets.map(v => ({ key: 'markup-'+v, label: 'Markup', value: MARKUP_PRESETS.find(p=>p.value===v)?.label || v, onRemove: () => setFilterMarkupPresets(filterMarkupPresets.filter(x=>x!==v)) })),
+                            ...filterDiskonSelected.map(v => ({ key: 'diskon-'+v, label: 'Diskon', value: DISKON_PRESETS.find(p=>p.value===v)?.label || v, onRemove: () => setFilterDiskonSelected(filterDiskonSelected.filter(x=>x!==v)) })),
+                            ...filterKategoriSelected.map(v => ({ key: 'kat-'+v, label: 'Kategori', value: v, onRemove: () => setFilterKategoriSelected(filterKategoriSelected.filter(x=>x!==v)) })),
+                            ...filterGolonganSelected.map(v => ({ key: 'gol-'+v, label: 'Golongan', value: v, onRemove: () => setFilterGolonganSelected(filterGolonganSelected.filter(x=>x!==v)) })),
+                            ...filterBarcodeSelected.map(v => ({ key: 'brc-'+v, label: 'Barcode', value: BARCODE_PRESETS.find(p=>p.value===v)?.label || v, onRemove: () => setFilterBarcodeSelected(filterBarcodeSelected.filter(x=>x!==v)) })),
+                        ];
+                        if (allTags.length === 0) return null;
+                        return (
+                            <div className="flex flex-wrap gap-1.5">
+                                {allTags.map(tag => (
+                                    <span key={tag.key} className="inline-flex items-center gap-1.5 bg-white border border-slate-200 rounded-full pl-3 pr-2 py-1 text-xs font-semibold text-slate-700 shadow-sm">
+                                        <span className="text-teal-600 font-bold">{tag.label}</span>
+                                        <span className="text-slate-500">{tag.value}</span>
+                                        <button onClick={tag.onRemove} className="w-4 h-4 flex items-center justify-center rounded-full bg-slate-100 hover:bg-red-100 hover:text-red-500 text-slate-400 transition-colors flex-shrink-0">
+                                            <Icon name="xmark" className="text-[9px]" />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        );
+                    })()}
+                    {/* Filter Modal - Full Screen */}
+                    {showFilterPanel && (
+                        <div className="fixed inset-0 bg-white z-[200] flex flex-col">
+
+                            {/* ── SUB-PAGES ── */}
+                            {['margin','markup','diskon','kategori','golongan','barcode'].includes(filterSubPage) && (() => {
+                                // Golongan: preset dinamis dari nama rak
+                                const GOLONGAN_PRESETS = [
+                                    { value: 'semua', label: 'Golongan' },
+                                    ...uniqueRacksData.map(r => ({ value: r.name, label: r.name }))
+                                ];
+                                const cfg = {
+                                    margin:   { presets: MARGIN_PRESETS,   selected: tmpMarginSelected,   setSelected: setTmpMarginSelected,   title: 'Margin'   },
+                                    markup:   { presets: MARKUP_PRESETS,   selected: tmpMarkupSelected,   setSelected: setTmpMarkupSelected,   title: 'Markup'   },
+                                    diskon:   { presets: DISKON_PRESETS,   selected: tmpDiskonSelected,   setSelected: setTmpDiskonSelected,   title: 'Diskon'   },
+                                    kategori: { presets: KATEGORI_PRESETS, selected: tmpKategoriSelected, setSelected: setTmpKategoriSelected, title: 'Kategori' },
+                                    golongan: { presets: GOLONGAN_PRESETS, selected: tmpGolonganSelected, setSelected: setTmpGolonganSelected, title: 'Golongan' },
+                                    barcode:  { presets: BARCODE_PRESETS,  selected: tmpBarcodeSelected,  setSelected: setTmpBarcodeSelected,  title: 'Barcode'  },
+                                }[filterSubPage];
+                                const { presets, selected, setSelected, title } = cfg;
+                                const specificValues = presets.filter(x => x.value !== 'semua').map(x => x.value);
+                                const allChecked = specificValues.length > 0 && specificValues.every(v => selected.includes(v));
+                                return (
+                                    <div className="flex flex-col h-full">
+                                        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+                                            <button onClick={() => setFilterSubPage(null)} className="text-teal-600 font-semibold text-sm flex items-center">
+                                                <Icon name="arrow-left" className="text-base" />
+                                            </button>
+                                            <button onClick={() => setFilterSubPage(null)} className="px-5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white text-sm font-bold rounded-lg transition-all active:scale-95 shadow-sm">
+                                                Filter
+                                            </button>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto">
+                                            <h1 className="text-2xl font-extrabold text-slate-900 px-4 pt-4 pb-2">{title}</h1>
+                                            {/* Tags */}
+                                            {selected.length > 0 && (
+                                                <div className="flex flex-wrap gap-2 px-4 pb-3">
+                                                    {selected.map(v => {
+                                                        const p = presets.find(x => x.value === v);
+                                                        return (
+                                                            <span key={v} className="flex items-center gap-1.5 bg-slate-100 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-full">
+                                                                {p?.label || v}
+                                                                <button onClick={() => setSelected(selected.filter(s => s !== v))} className="text-teal-600 hover:text-red-500 transition-colors ml-0.5">
+                                                                    <Icon name="xmark" className="text-xs" />
+                                                                </button>
+                                                            </span>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                            {/* Options list */}
+                                            {filterSubPage === 'golongan' ? (() => {
+                                                // Golongan: "Pilih Semua" full-width, lalu grid 2 kolom compact
+                                                const semuaPreset = presets.find(p => p.value === 'semua');
+                                                const otherPresets = presets.filter(p => p.value !== 'semua');
+                                                return (
+                                                    <div>
+                                                        {/* Baris Pilih Semua */}
+                                                        {semuaPreset && (
+                                                            <div>
+                                                                <button
+                                                                    onClick={() => setSelected(allChecked ? [] : [...specificValues])}
+                                                                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 transition-colors active:bg-slate-100"
+                                                                >
+                                                                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${allChecked ? 'border-teal-600 bg-teal-600' : 'border-slate-300'}`}>
+                                                                        {allChecked && <Icon name="check" className="text-white text-[8px]" />}
+                                                                    </div>
+                                                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Pilih Semua</span>
+                                                                </button>
+                                                                <div className="h-px bg-slate-100" />
+                                                            </div>
+                                                        )}
+                                                        {/* Grid 2 kolom untuk opsi golongan */}
+                                                        <div className="grid grid-cols-2 gap-1.5 px-3 py-2">
+                                                            {otherPresets.map((p) => {
+                                                                const isChecked = selected.includes(p.value);
+                                                                return (
+                                                                    <button
+                                                                        key={p.value}
+                                                                        onClick={() => setSelected(togglePreset(selected, p.value))}
+                                                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-all active:scale-95 border ${isChecked ? 'bg-teal-50 border-teal-300 text-teal-800' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}`}
+                                                                    >
+                                                                        <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isChecked ? 'border-teal-600 bg-teal-600' : 'border-slate-300'}`}>
+                                                                            {isChecked && <Icon name="check" className="text-white text-[7px]" />}
+                                                                        </div>
+                                                                        <span className="text-xs font-semibold truncate leading-tight">{p.label}</span>
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                            {otherPresets.length === 0 && (
+                                                                <div className="col-span-2 flex flex-col items-center justify-center py-8 text-slate-400">
+                                                                    <Icon name="box-open" className="text-2xl mb-2 opacity-40" />
+                                                                    <p className="text-xs">Belum ada golongan/rak</p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })() : presets.map((p) => {
+                                                const isSemua_ = p.value === 'semua';
+                                                const isChecked = isSemua_ ? allChecked : selected.includes(p.value);
+                                                return (
+                                                    <div key={p.value}>
+                                                        <button
+                                                            onClick={() => {
+                                                                if (isSemua_) { setSelected(allChecked ? [] : [...specificValues]); }
+                                                                else { setSelected(togglePreset(selected, p.value)); }
+                                                            }}
+                                                            className="w-full flex items-center gap-4 px-4 py-3.5 text-left hover:bg-slate-50 transition-colors active:bg-slate-100"
+                                                        >
+                                                            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${isChecked ? 'border-teal-600 bg-teal-600' : 'border-slate-300'}`}>
+                                                                {isChecked && <Icon name="check" className="text-white text-[10px]" />}
+                                                            </div>
+                                                            <span className="text-sm font-semibold text-slate-800">{p.label}</span>
+                                                        </button>
+                                                        <div className="h-px bg-slate-100 mx-4" />
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            {/* ── MAIN FILTER PAGE ── */}
+                            {!filterSubPage && (
+                                <>
+                                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+                                        <button onClick={() => setShowFilterPanel(false)} className="flex items-center gap-1.5 text-teal-600 font-semibold text-sm">
+                                            <Icon name="xmark" className="text-base" />
+                                            <span>Katalog</span>
+                                        </button>
+                                        <button onClick={() => { setFilterMarginPresets([...tmpMarginSelected]); setFilterMarkupPresets([...tmpMarkupSelected]); setFilterDiskonSelected([...tmpDiskonSelected]); setFilterKategoriSelected([...tmpKategoriSelected]); setFilterGolonganSelected([...tmpGolonganSelected]); setFilterBarcodeSelected([...tmpBarcodeSelected]); setShowFilterPanel(false); }} className="px-5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white text-sm font-bold rounded-lg transition-all active:scale-95 shadow-sm">
+                                            Pasang
+                                        </button>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto">
+                                        <h1 className="text-2xl font-extrabold text-slate-900 px-4 pt-4 pb-3">Filter</h1>
+                                        {[
+                                            { key: 'margin',   label: 'Margin',   desc: tmpMarginSelected.length   > 0 ? tmpMarginSelected.map(v   => MARGIN_PRESETS.find(p=>p.value===v)?.label).filter(Boolean).join(', ')   : null },
+                                            { key: 'markup',   label: 'Markup',   desc: tmpMarkupSelected.length   > 0 ? tmpMarkupSelected.map(v   => MARKUP_PRESETS.find(p=>p.value===v)?.label).filter(Boolean).join(', ')   : null },
+                                            { key: 'diskon',   label: 'Diskon',   desc: tmpDiskonSelected.length   > 0 ? tmpDiskonSelected.map(v   => DISKON_PRESETS.find(p=>p.value===v)?.label).filter(Boolean).join(', ')   : null },
+                                            { key: 'kategori', label: 'Kategori', desc: tmpKategoriSelected.length > 0 ? tmpKategoriSelected.join(', ') : null },
+                                            { key: 'golongan', label: 'Golongan', desc: tmpGolonganSelected.length > 0 ? tmpGolonganSelected.join(', ') : null },
+                                            { key: 'barcode',  label: 'Barcode',  desc: tmpBarcodeSelected.length  > 0 ? tmpBarcodeSelected.map(v   => BARCODE_PRESETS.find(p=>p.value===v)?.label).filter(Boolean).join(', ')  : null },
+                                        ].map(row => (
+                                            <div key={row.key}>
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-slate-800">{row.label}</p>
+                                                        {row.desc && <p className="text-xs text-teal-600 mt-0.5 max-w-[200px] truncate">{row.desc}</p>}
+                                                    </div>
+                                                    <button onClick={() => setFilterSubPage(row.key)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-teal-500 text-teal-600 text-xs font-semibold hover:bg-teal-50 transition-all active:scale-95">
+                                                        <span>Ubah</span>
+                                                        <Icon name="pen" className="text-[10px]" />
+                                                    </button>
+                                                </div>
+                                                <div className="h-px bg-slate-100" />
+                                            </div>
+                                        ))}
+                                        <div className="px-4 py-4">
+                                            <button onClick={() => { setTmpMarginSelected([]); setTmpMarkupSelected([]); setTmpDiskonSelected([]); setTmpKategoriSelected([]); setTmpGolonganSelected([]); setTmpBarcodeSelected([]); }} className="w-full py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 transition-all">
+                                                Reset Semua Filter
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+                    {/* Header Barang - Sticky */}
+                    {!loading && filteredItems.length > 0 && (
+                        <div className="flex items-center justify-between pt-2 pb-2 border-b border-slate-200 sticky top-[54px] md:top-0 bg-white z-10 -mx-4 md:-mx-8 pl-11 pr-4 md:px-8">
+                            <p className="text-sm font-bold text-slate-800">Barang</p>
+                            <p className="text-xs text-slate-400 font-medium">{filteredItems.length} item</p>
+                        </div>
+                    )}
                     <div className="flex-1 overflow-y-auto pb-32 pr-1 custom-scrollbar">
                         {loading ? (<div className="flex flex-col items-center justify-center py-20"><div className="typing-dot bg-sky-500"></div><p className="text-xs text-slate-400 mt-2">Menghubungkan Database...</p></div>) : filteredItems.length === 0 ? (<div className="flex flex-col items-center justify-center py-20 opacity-40"><div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Icon name="box-open" className="text-2xl text-slate-400" /></div><p className="font-semibold text-slate-500 text-center text-sm">Tidak ada data</p></div>) : (<><div className="">{displayedItems.map((item, index) => { const threshold = item.minStock ? safeNumber(item.minStock) : lowStockThreshold; const isLow = safeNumber(item.qty) < threshold; const isNew = isNewItem(item.createdAt); const animDelay = `${index * 50}ms`; const nameClass = searchQuery ? "type-effect-wrapper" : ""; const daysLeft = getDaysRemaining(item.exp); const isExpired = daysLeft !== null && daysLeft < 0; const isNearExp = daysLeft !== null && daysLeft < 90 && !isExpired; const expColor = isExpired ? 'text-red-600' : (isNearExp ? 'text-amber-600' : 'text-slate-400'); const expIcon = isExpired ? 'triangle-exclamation' : 'calendar-days'; return (<div key={item.id + searchQuery} style={{ animationDelay: animDelay }} onClick={() => setSelectedDetailItem(item)} className={`slide-up border-b py-3.5 cursor-pointer hover:bg-slate-50 transition-colors active:bg-slate-100 ${isLow ? 'border-amber-100' : 'border-slate-100'}`}>
                             <div className="flex items-start gap-2">
@@ -16360,7 +16734,7 @@
                         </aside>
                     <main className="flex-1 md:ml-0 p-4 md:p-8 max-w-7xl mx-auto w-full mb-0">
                         {/* ── FARMACARE-STYLE TOPBAR (mobile only) ── */}
-                        <div className="md:hidden -mx-4 -mt-4 mb-5 flex items-center bg-white border-b border-slate-200 px-3.5 gap-2.5 sticky top-0 z-30" style={{minHeight:'54px'}}>
+                        <div className="mobile-topbar md:hidden -mx-4 -mt-4 mb-5 flex items-center bg-white border-b border-slate-200 px-3.5 gap-2.5 sticky top-0 z-30" style={{minHeight:'54px'}}>
                             {/* Hamburger */}
                             <button onClick={() => setIsSidebarOpen(true)} className="flex items-center justify-center p-1.5 rounded-lg active:bg-slate-100 transition-colors flex-shrink-0">
                                 <svg width="18" height="13" viewBox="0 0 18 13" fill="none">
