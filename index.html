@@ -883,7 +883,7 @@
                         <Icon name={iconName} style={{ fontSize: '14px', flexShrink: 0 }} />
                         <span>{label}</span>
                         <span style={{ opacity: 0.65, fontWeight: 500, fontSize: '11px', marginLeft: 2 }}>
-                            — lihat Stok Barang
+                            — lihat Katalog
                         </span>
                     </div>
                 </div>
@@ -1674,7 +1674,7 @@
                 { key: 'enableHistory', label: 'Menu Riwayat', icon: 'clock-rotate-left', desc: 'Riwayat penjualan' },
                 { key: 'enablePurchases', label: 'Faktur Pembelian', icon: 'file-invoice-dollar', desc: 'Pembelian & faktur' },
                 { key: 'enableDashboard', label: 'Dashboard', icon: 'chart-pie', desc: 'Laporan & statistik' },
-                { key: 'enableStock', label: 'Stok Barang', icon: 'boxes-stacked', desc: 'Manajemen stok' },
+                { key: 'enableStock', label: 'Katalog', icon: 'boxes-stacked', desc: 'Manajemen stok' },
                 { key: 'enableStockOpname', label: 'Stock Opname', icon: 'clipboard-check', desc: 'Penghitungan fisik stok' },
                 { key: 'enableCashbook', label: 'Buku Kas', icon: 'book', desc: 'Catatan keuangan' },
                 { key: 'enableCatatan', label: 'Catatan', icon: 'thumbtack', desc: 'Papan catatan' },
@@ -1699,7 +1699,7 @@
                 { key: 'showMenuHistory', label: 'Riwayat', icon: 'clock-rotate-left', desc: 'Tampilkan menu riwayat' },
                 { key: 'showMenuPurchases', label: 'Faktur Pembelian', icon: 'file-invoice-dollar', desc: 'Tampilkan faktur pembelian' },
                 { key: 'showMenuDashboard', label: 'Dashboard', icon: 'chart-pie', desc: 'Tampilkan dashboard' },
-                { key: 'showMenuStock', label: 'Stok Barang', icon: 'boxes-stacked', desc: 'Tampilkan stok barang' },
+                { key: 'showMenuStock', label: 'Katalog', icon: 'boxes-stacked', desc: 'Tampilkan stok barang' },
                 { key: 'showMenuStockOpname', label: 'Stock Opname', icon: 'clipboard-check', desc: 'Tampilkan stock opname' },
                 { key: 'showMenuCashbook', label: 'Buku Kas', icon: 'book', desc: 'Tampilkan buku kas' },
                 { key: 'showMenuCatatan', label: 'Catatan', icon: 'thumbtack', desc: 'Tampilkan catatan' },
@@ -11770,7 +11770,7 @@
                             <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl"><Icon name="lock" className="text-amber-500" /></div>
                             <h3 className="text-xl font-bold text-slate-800 mb-2">Akses Terbatas</h3>
                             <p className="text-slate-500 text-sm mb-4">Kamu tidak punya akses untuk menambah atau mengedit barang. Hubungi owner untuk mengaktifkan akses Input Manual.</p>
-                            <button onClick={onCancel} className="px-6 py-2.5 bg-sky-500 text-white rounded-xl font-bold text-sm hover:bg-sky-600 transition-all active:scale-95">Kembali ke Stok Barang</button>
+                            <button onClick={onCancel} className="px-6 py-2.5 bg-sky-500 text-white rounded-xl font-bold text-sm hover:bg-sky-600 transition-all active:scale-95">Kembali ke Katalog</button>
                         </div>
                     </div>
                 );
@@ -15076,6 +15076,526 @@
         };
         // =================== END JADWAL SHIFT VIEW ===================
 
+        // =================== STOK VIEW ===================
+        const StokView = ({ items, currentProfile, settings, readOnly, isOwner }) => {
+            const isAllStores = currentProfile?.id === 'all_stores';
+            const storeProfiles = settings?.storeProfiles || [];
+            const getStoreName = (storeId) => storeProfiles.find(p => p.id === storeId)?.name || storeId || 'Toko';
+            const [selectedDetailItem, setSelectedDetailItem] = React.useState(null);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [sortBy, setSortBy] = useState('name_asc');
+            const [filterPrioritas, setFilterPrioritas] = useState('semua');
+            const [showFilter, setShowFilter] = useState(false);
+            const [showFilterPage, setShowFilterPage] = useState(false);
+            const [filterStok, setFilterStok] = useState([]);
+            const [filterPrioritasArr, setFilterPrioritasArr] = useState([]);
+            const [tempFilterPrioritas, setTempFilterPrioritas] = useState([]);
+            const [tempFilterStok, setTempFilterStok] = useState([]);
+            const [filterSubPage, setFilterSubPage] = useState(null); // null | 'stok' | 'prioritas'
+            const STOK_OPTS = [{value:'stok_tersedia',label:'Stok tersedia'},{value:'stok_kosong',label:'Stok kosong'},{value:'stok_mati',label:'Stok di bawah 0'},{value:'stok_menipis',label:'Stok batch dibawah 0'}];
+            const PRIORITAS_OPTS = [{value:'tinggi',label:'Tinggi'},{value:'sedang',label:'Sedang'},{value:'rendah',label:'Rendah'},{value:'stok_mati',label:'Stok mati'}];
+            const toggleArr = (arr, val) => arr.includes(val) ? arr.filter(x=>x!==val) : [...arr, val];
+            const [selectedItems, setSelectedItems] = useState([]);
+            const [selectAll, setSelectAll] = useState(false);
+
+            const formatRupiahLocal = (v) => {
+                const n = Number(v) || 0;
+                return 'Rp' + n.toLocaleString('id-ID');
+            };
+
+            const getDaysRemainingLocal = (expStr) => {
+                if (!expStr) return null;
+                const exp = new Date(expStr);
+                const now = new Date();
+                return Math.floor((exp - now) / (1000 * 60 * 60 * 24));
+            };
+
+            const formatExpDate = (expStr) => {
+                if (!expStr) return null;
+                const d = new Date(expStr);
+                const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des'];
+                return `${d.getFullYear()} ${months[d.getMonth()]} ${String(d.getDate()).padStart(2,'0')}`;
+            };
+
+            // Klasifikasi prioritas menggunakan logika ABC sederhana
+            const getPrioritas = (item) => {
+                const qty = Number(item.qty) || 0;
+                const minStock = Number(item.minStock) || 10;
+                if (qty === 0) return 'stok_mati';
+                if (qty <= minStock * 0.5) return 'tinggi';
+                if (qty <= minStock) return 'sedang';
+                return 'rendah';
+            };
+
+            const getPrioritasLabel = (p) => {
+                if (p === 'stok_mati') return 'Stok mati';
+                if (p === 'tinggi') return 'Tinggi';
+                if (p === 'sedang') return 'Sedang';
+                return 'Rendah';
+            };
+
+            const getPrioritasIcon = (p) => {
+                if (p === 'stok_mati') return { icon: '☠', bg: '#f1f5f9', color: '#64748b', border: '#cbd5e1' };
+                if (p === 'tinggi') return { icon: 'A', bg: '#fef2f2', color: '#dc2626', border: '#fca5a5' };
+                if (p === 'sedang') return { icon: 'B', bg: '#eff6ff', color: '#2563eb', border: '#93c5fd' };
+                return { icon: 'C', bg: '#f5f3ff', color: '#7c3aed', border: '#c4b5fd' };
+            };
+
+            const stokMatiItems = items.filter(i => (Number(i.qty) || 0) <= 0);
+            const konsinyasiItems = items.filter(i => i.isKonsinyasi);
+            const totalNilaiKonsinyasi = konsinyasiItems.reduce((sum, i) => sum + ((Number(i.qty)||0) * (Number(i.costPrice || i.price)||0)), 0);
+
+            let filteredItems = [...items];
+
+            // Filter pencarian
+            if (searchQuery.trim()) {
+                const q = searchQuery.toLowerCase();
+                filteredItems = filteredItems.filter(i => i.name.toLowerCase().includes(q));
+            }
+
+            // Filter prioritas
+            if (filterPrioritasArr.length > 0) {
+                filteredItems = filteredItems.filter(i => filterPrioritasArr.includes(getPrioritas(i)));
+            }
+
+            // Filter stok
+            if (filterStok.length > 0) {
+                filteredItems = filteredItems.filter(i => {
+                    const q = Number(i.qty)||0;
+                    return filterStok.some(f =>
+                        f==='stok_tersedia' ? q>5 :
+                        f==='stok_kosong' ? q===0 :
+                        f==='stok_mati' ? q<=0 :
+                        f==='stok_menipis' ? (q>0&&q<=5) : false
+                    );
+                });
+            }
+
+            // Sort
+            filteredItems.sort((a, b) => {
+                if (sortBy === 'name_asc') return a.name.localeCompare(b.name, 'id');
+                if (sortBy === 'name_desc') return b.name.localeCompare(a.name, 'id');
+                if (sortBy === 'qty_asc') return (Number(a.qty)||0) - (Number(b.qty)||0);
+                if (sortBy === 'qty_desc') return (Number(b.qty)||0) - (Number(a.qty)||0);
+                if (sortBy === 'exp_asc') {
+                    const da = getDaysRemainingLocal(a.exp) ?? 99999;
+                    const db = getDaysRemainingLocal(b.exp) ?? 99999;
+                    return da - db;
+                }
+                return 0;
+            });
+
+            const toggleSelectItem = (id) => {
+                setSelectedItems(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+            };
+
+            const toggleSelectAll = () => {
+                if (selectAll) {
+                    setSelectedItems([]);
+                    setSelectAll(false);
+                } else {
+                    setSelectedItems(filteredItems.map(i => i.id));
+                    setSelectAll(true);
+                }
+            };
+
+            const sortOptions = [
+                { value: 'name_asc', label: 'Nama A-Z' },
+                { value: 'name_desc', label: 'Nama Z-A' },
+                { value: 'qty_asc', label: 'Stok Terendah' },
+                { value: 'qty_desc', label: 'Stok Tertinggi' },
+                { value: 'exp_asc', label: 'ED Terdekat' },
+            ];
+
+            const [showSort, setShowSort] = useState(false);
+            const currentSortLabel = sortOptions.find(s => s.value === sortBy)?.label || 'Nama A-Z';
+
+            if (selectedDetailItem) {
+                return (
+                    <ProductDetailPage
+                        item={selectedDetailItem}
+                        onBack={() => setSelectedDetailItem(null)}
+                        onEdit={(item) => { setSelectedDetailItem(null); }}
+                        onDelete={() => { setSelectedDetailItem(null); }}
+                        settings={settings}
+                        readOnly={readOnly}
+                        isOwner={isOwner}
+                        lowStockThreshold={settings?.lowStockThreshold || 5}
+                        currentProfile={currentProfile}
+                        onNavigateToPurchases={() => {}}
+                        onNavigateToHistory={() => {}}
+                    />
+                );
+            }
+
+            return (
+                <div style={{maxWidth:'480px',margin:'0 auto'}}>
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-4">
+                        <h1 className="text-2xl font-black text-slate-800">Stok</h1>
+                        <button
+                            style={{display:'flex',alignItems:'center',gap:'6px',padding:'7px 14px',borderRadius:'10px',border:'1.5px solid #e2e8f0',background:'#fff',color:'#475569',fontSize:'13px',fontWeight:700,cursor:'pointer',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}
+                        >
+                            <Icon name="download" className="text-sm" /> Unduh
+                        </button>
+                    </div>
+
+                    {/* Stok Mati & Konsinyasi Cards - side by side */}
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'20px'}}>
+                        {/* Stok Mati Card */}
+                        <div style={{background:'#fff',borderRadius:'14px',padding:'14px 14px'}}>
+                            <div style={{display:'flex',alignItems:'center',gap:'5px',marginBottom:'4px'}}>
+                                <span style={{fontSize:'12px',fontWeight:700,color:'#334155',borderBottom:'1.5px dashed #94a3b8',paddingBottom:'1px'}}>Stok mati</span>
+                                <span style={{width:'15px',height:'15px',borderRadius:'50%',border:'1.5px solid #94a3b8',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:'9px',color:'#64748b',fontWeight:900,cursor:'pointer',flexShrink:0}}>?</span>
+                            </div>
+                            <div style={{fontSize:'26px',fontWeight:900,color:'#1e293b',lineHeight:1.1,marginBottom:'6px'}}>{stokMatiItems.length} <span style={{fontSize:'14px',fontWeight:700}}>barang</span></div>
+                            <a href="#" style={{color:'#0d9488',fontSize:'12px',fontWeight:700,textDecoration:'none',display:'flex',alignItems:'center',gap:'4px'}}>
+                                Lihat detail <Icon name="arrow-right" className="text-xs" />
+                            </a>
+                        </div>
+
+                        {/* Nilai Konsinyasi Card */}
+                        <div style={{background:'#fff',borderRadius:'14px',padding:'14px 14px'}}>
+                            <div style={{fontSize:'12px',fontWeight:700,color:'#334155',marginBottom:'4px'}}>Total nilai stok konsinyasi</div>
+                            <div style={{fontSize:'22px',fontWeight:900,color:'#1e293b',lineHeight:1.1,marginBottom:'6px'}}>{formatRupiahLocal(totalNilaiKonsinyasi)}</div>
+                            <a href="#" style={{color:'#0d9488',fontSize:'12px',fontWeight:700,textDecoration:'none',display:'flex',alignItems:'center',gap:'4px'}}>
+                                Lihat detail <Icon name="arrow-right" className="text-xs" />
+                            </a>
+                        </div>
+                    </div>
+
+                    {/* Search */}
+                    <div style={{display:'flex',gap:'8px',marginBottom:'10px'}}>
+                        <div style={{flex:1,position:'relative',display:'flex',alignItems:'center',border:'1.5px solid #e2e8f0',borderRadius:'10px',background:'#fff',overflow:'hidden'}}>
+                            <span style={{paddingLeft:'12px',color:'#94a3b8',flexShrink:0}}><Icon name="magnifying-glass" className="text-base" /></span>
+                            <input
+                                type="text"
+                                placeholder="Cari barang"
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                style={{flex:1,border:'none',outline:'none',padding:'10px 10px',fontSize:'14px',color:'#334155',background:'transparent'}}
+                            />
+                        </div>
+                        <button
+                            onClick={() => {}}
+                            style={{padding:'10px 18px',borderRadius:'10px',border:'1.5px solid #e2e8f0',background:'#fff',color:'#0d9488',fontSize:'14px',fontWeight:700,cursor:'pointer'}}
+                        >
+                            Cari
+                        </button>
+                    </div>
+
+                    {/* Filter & Sort */}
+                    <div style={{display:'flex',gap:'8px',marginBottom:'18px',position:'relative'}}>
+                        <div style={{position:'relative',flex:1}}>
+                            <button
+                                onClick={() => { setTempFilterPrioritas([...filterPrioritasArr]); setTempFilterStok([...filterStok]); setFilterSubPage(null); setShowFilterPage(true); }}
+                                style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',padding:'9px 14px',borderRadius:'10px',border:'1.5px solid #e2e8f0',background:'#fff',color:'#0d9488',fontSize:'13px',fontWeight:700,cursor:'pointer'}}
+                            >
+                                <Icon name="sliders" className="text-sm" /> Filter
+                                {(filterPrioritasArr.length > 0 || filterStok.length > 0) && <span style={{width:'8px',height:'8px',borderRadius:'50%',background:'#0d9488',display:'inline-block'}}></span>}
+                            </button>
+                        </div>
+                        <div style={{position:'relative',flex:1}}>
+                            <button
+                                onClick={() => { setShowSort(p => !p); }}
+                                style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'6px',padding:'9px 14px',borderRadius:'10px',border:'1.5px solid #e2e8f0',background:'#fff',color:'#0d9488',fontSize:'13px',fontWeight:700,cursor:'pointer'}}
+                            >
+                                <span style={{display:'flex',alignItems:'center',gap:'6px'}}><Icon name="arrow-up-wide-short" className="text-sm" />{currentSortLabel}</span>
+                                <Icon name="chevron-down" className="text-xs" style={{transition:'transform .2s',transform: showSort ? 'rotate(180deg)' : 'rotate(0deg)'}} />
+                            </button>
+                            {showSort && (
+                                <div style={{position:'absolute',top:'100%',right:0,marginTop:'4px',background:'#fff',border:'1.5px solid #e2e8f0',borderRadius:'12px',zIndex:50,padding:'8px',boxShadow:'0 8px 24px rgba(0,0,0,0.1)',minWidth:'160px'}}>
+                                    {sortOptions.map(opt => (
+                                        <button key={opt.value} onClick={() => { setSortBy(opt.value); setShowSort(false); }}
+                                            style={{display:'block',width:'100%',textAlign:'left',padding:'8px 12px',borderRadius:'8px',border:'none',background: sortBy===opt.value ? '#f0fdfa' : 'transparent',color: sortBy===opt.value ? '#0d9488' : '#475569',fontSize:'13px',fontWeight: sortBy===opt.value ? 700 : 500,cursor:'pointer'}}
+                                        >{opt.label}</button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Active Filter Tags */}
+                    {(() => {
+                        const stokLabels = {stok_tersedia:'Stok tersedia',stok_kosong:'Stok kosong',stok_mati:'Stok di bawah 0',stok_menipis:'Stok batch dibawah 0'};
+                        const prioritasLabels = {tinggi:'Tinggi',sedang:'Sedang',rendah:'Rendah',stok_mati:'Stok mati'};
+                        const allTags = [
+                            ...filterStok.map(v => ({ key:'stok-'+v, label:'Stok', value: stokLabels[v]||v, onRemove: () => setFilterStok(filterStok.filter(x=>x!==v)) })),
+                            ...filterPrioritasArr.map(v => ({ key:'prioritas-'+v, label:'Prioritas', value: prioritasLabels[v]||v, onRemove: () => setFilterPrioritasArr(filterPrioritasArr.filter(x=>x!==v)) })),
+                        ];
+                        if (allTags.length === 0) return null;
+                        return (
+                            <div style={{display:'flex',flexWrap:'wrap',gap:'6px',marginBottom:'12px',marginTop:'-6px'}}>
+                                {allTags.map(tag => (
+                                    <span key={tag.key} style={{display:'inline-flex',alignItems:'center',gap:'6px',background:'#fff',border:'1px solid #e2e8f0',borderRadius:'999px',paddingLeft:'10px',paddingRight:'6px',paddingTop:'4px',paddingBottom:'4px',fontSize:'12px',fontWeight:600,color:'#475569',boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
+                                        <span style={{color:'#0d9488',fontWeight:700}}>{tag.label}</span>
+                                        <span style={{color:'#64748b'}}>{tag.value}</span>
+                                        <button onClick={tag.onRemove} style={{width:'16px',height:'16px',display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:'#f1f5f9',border:'none',cursor:'pointer',color:'#94a3b8',flexShrink:0,padding:0}}>
+                                            <Icon name="xmark" style={{fontSize:'9px'}} />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        );
+                    })()}
+
+                    {/* Filter Sub-Page Overlay */}
+                    {showFilterPage && (
+                        <div style={{position:'fixed',inset:0,background:'#fff',zIndex:200,display:'flex',flexDirection:'column',maxWidth:'480px',margin:'0 auto',left:0,right:0}}>
+                            {/* Header - hidden when sub-page is open */}
+                            {!filterSubPage && (
+                            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 16px',borderBottom:'1px solid #e2e8f0'}}>
+                                <button onClick={() => { setShowFilterPage(false); setFilterSubPage(null); }} style={{display:'flex',alignItems:'center',gap:'6px',background:'none',border:'none',cursor:'pointer',color:'#1e293b',fontSize:'14px',fontWeight:700,padding:0}}>
+                                    <Icon name="xmark" className="text-sm" style={{color:'#0d9488'}} />
+                                    <span>Stok</span>
+                                </button>
+                                <button onClick={() => { setFilterPrioritasArr([...tempFilterPrioritas]); setFilterStok([...tempFilterStok]); setShowFilterPage(false); setFilterSubPage(null); }}
+                                    style={{background:'#0d9488',color:'#fff',border:'none',borderRadius:'8px',padding:'7px 18px',fontSize:'13px',fontWeight:800,cursor:'pointer'}}>
+                                    Pasang
+                                </button>
+                            </div>
+                            )}
+
+                            {/* Sub-page: Stok options */}
+                            {filterSubPage === 'stok' && (
+                                <div style={{flex:1,display:'flex',flexDirection:'column'}}>
+                                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 16px',borderBottom:'1px solid #e2e8f0'}}>
+                                        <button onClick={() => setFilterSubPage(null)} style={{background:'none',border:'none',cursor:'pointer',padding:0,color:'#0d9488',fontSize:'20px',lineHeight:1}}><Icon name="arrow-left" /></button>
+                                        <button onClick={() => { setFilterPrioritasArr([...tempFilterPrioritas]); setFilterStok([...tempFilterStok]); setShowFilterPage(false); setFilterSubPage(null); }}
+                                            style={{background:'#0d9488',color:'#fff',border:'none',borderRadius:'8px',padding:'7px 18px',fontSize:'13px',fontWeight:800,cursor:'pointer'}}>Filter</button>
+                                    </div>
+                                    <div style={{padding:'16px 16px 8px',fontSize:'26px',fontWeight:900,color:'#1e293b'}}>Stok</div>
+                                    {/* Tags below title */}
+                                    {tempFilterStok.length > 0 && tempFilterStok.length < 4 && (
+                                        <div style={{padding:'0 16px 8px',display:'flex',flexWrap:'wrap',gap:'6px'}}>
+                                            {tempFilterStok.map(v => (
+                                                <span key={v} style={{display:'inline-flex',alignItems:'center',gap:'6px',background:'#fff',border:'1px solid #e2e8f0',borderRadius:'999px',paddingLeft:'10px',paddingRight:'6px',paddingTop:'4px',paddingBottom:'4px',fontSize:'12px',fontWeight:600,boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
+                                                    <span style={{color:'#0d9488',fontWeight:700}}>Stok</span>
+                                                    <span style={{color:'#64748b'}}>{STOK_OPTS.find(o=>o.value===v)?.label}</span>
+                                                    <button onClick={() => setTempFilterStok(tempFilterStok.filter(x=>x!==v))} style={{width:'16px',height:'16px',display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:'#f1f5f9',border:'none',cursor:'pointer',color:'#94a3b8',flexShrink:0,padding:0}}><Icon name="xmark" style={{fontSize:'9px'}} /></button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div style={{flex:1,overflowY:'auto',padding:'0 16px'}}>
+                                        {/* Select all row */}
+                                        <div onClick={() => setTempFilterStok(tempFilterStok.length===STOK_OPTS.length ? [] : STOK_OPTS.map(o=>o.value))} style={{display:'flex',alignItems:'center',gap:'14px',padding:'13px 0',borderBottom:'2px solid #1e293b',cursor:'pointer'}}>
+                                            <div style={{width:'20px',height:'20px',borderRadius:'4px',border:`2px solid ${tempFilterStok.length===STOK_OPTS.length ? '#0d9488' : '#94a3b8'}`,background: tempFilterStok.length===STOK_OPTS.length ? '#0d9488' : '#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                                {tempFilterStok.length===STOK_OPTS.length && <Icon name="check" style={{color:'#fff',fontSize:'11px'}} />}
+                                            </div>
+                                            <span style={{fontSize:'14px',fontWeight:700,color:'#1e293b'}}>Stok</span>
+                                        </div>
+                                        {STOK_OPTS.map(opt => (
+                                            <div key={opt.value} onClick={() => setTempFilterStok(toggleArr(tempFilterStok, opt.value))}
+                                                style={{display:'flex',alignItems:'center',gap:'14px',padding:'13px 0',borderBottom:'1px solid #e2e8f0',cursor:'pointer'}}>
+                                                <div style={{width:'20px',height:'20px',borderRadius:'4px',border:`2px solid ${tempFilterStok.includes(opt.value) ? '#0d9488' : '#94a3b8'}`,background: tempFilterStok.includes(opt.value) ? '#0d9488' : '#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                                    {tempFilterStok.includes(opt.value) && <Icon name="check" style={{color:'#fff',fontSize:'11px'}} />}
+                                                </div>
+                                                <span style={{fontSize:'14px',fontWeight:600,color:'#1e293b'}}>{opt.label}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Sub-page: Prioritas options */}
+                            {filterSubPage === 'prioritas' && (
+                                <div style={{flex:1,display:'flex',flexDirection:'column'}}>
+                                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 16px',borderBottom:'1px solid #e2e8f0'}}>
+                                        <button onClick={() => setFilterSubPage(null)} style={{background:'none',border:'none',cursor:'pointer',padding:0,color:'#0d9488',fontSize:'20px',lineHeight:1}}><Icon name="arrow-left" /></button>
+                                        <button onClick={() => { setFilterPrioritasArr([...tempFilterPrioritas]); setFilterStok([...tempFilterStok]); setShowFilterPage(false); setFilterSubPage(null); }}
+                                            style={{background:'#0d9488',color:'#fff',border:'none',borderRadius:'8px',padding:'7px 18px',fontSize:'13px',fontWeight:800,cursor:'pointer'}}>Filter</button>
+                                    </div>
+                                    <div style={{padding:'16px 16px 8px',fontSize:'26px',fontWeight:900,color:'#1e293b'}}>Prioritas</div>
+                                    {/* Tags below title */}
+                                    {tempFilterPrioritas.length > 0 && tempFilterPrioritas.length < 4 && (
+                                        <div style={{padding:'0 16px 8px',display:'flex',flexWrap:'wrap',gap:'6px'}}>
+                                            {tempFilterPrioritas.map(v => (
+                                                <span key={v} style={{display:'inline-flex',alignItems:'center',gap:'6px',background:'#fff',border:'1px solid #e2e8f0',borderRadius:'999px',paddingLeft:'10px',paddingRight:'6px',paddingTop:'4px',paddingBottom:'4px',fontSize:'12px',fontWeight:600,boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
+                                                    <span style={{color:'#0d9488',fontWeight:700}}>Prioritas</span>
+                                                    <span style={{color:'#64748b'}}>{PRIORITAS_OPTS.find(o=>o.value===v)?.label}</span>
+                                                    <button onClick={() => setTempFilterPrioritas(tempFilterPrioritas.filter(x=>x!==v))} style={{width:'16px',height:'16px',display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:'#f1f5f9',border:'none',cursor:'pointer',color:'#94a3b8',flexShrink:0,padding:0}}><Icon name="xmark" style={{fontSize:'9px'}} /></button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div style={{flex:1,overflowY:'auto',padding:'0 16px'}}>
+                                        {/* Select all row */}
+                                        <div onClick={() => setTempFilterPrioritas(tempFilterPrioritas.length===PRIORITAS_OPTS.length ? [] : PRIORITAS_OPTS.map(o=>o.value))} style={{display:'flex',alignItems:'center',gap:'14px',padding:'13px 0',borderBottom:'2px solid #1e293b',cursor:'pointer'}}>
+                                            <div style={{width:'20px',height:'20px',borderRadius:'4px',border:`2px solid ${tempFilterPrioritas.length===PRIORITAS_OPTS.length ? '#0d9488' : '#94a3b8'}`,background: tempFilterPrioritas.length===PRIORITAS_OPTS.length ? '#0d9488' : '#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                                {tempFilterPrioritas.length===PRIORITAS_OPTS.length && <Icon name="check" style={{color:'#fff',fontSize:'11px'}} />}
+                                            </div>
+                                            <span style={{fontSize:'14px',fontWeight:700,color:'#1e293b'}}>Prioritas</span>
+                                        </div>
+                                        {PRIORITAS_OPTS.map(opt => (
+                                            <div key={opt.value} onClick={() => setTempFilterPrioritas(toggleArr(tempFilterPrioritas, opt.value))}
+                                                style={{display:'flex',alignItems:'center',gap:'14px',padding:'13px 0',borderBottom:'1px solid #e2e8f0',cursor:'pointer'}}>
+                                                <div style={{width:'20px',height:'20px',borderRadius:'4px',border:`2px solid ${tempFilterPrioritas.includes(opt.value) ? '#0d9488' : '#94a3b8'}`,background: tempFilterPrioritas.includes(opt.value) ? '#0d9488' : '#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                                    {tempFilterPrioritas.includes(opt.value) && <Icon name="check" style={{color:'#fff',fontSize:'11px'}} />}
+                                                </div>
+                                                <span style={{fontSize:'14px',fontWeight:600,color:'#1e293b'}}>{opt.label}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Main filter list */}
+                            {!filterSubPage && (
+                                <div style={{flex:1,overflowY:'auto',padding:'0 16px'}}>
+                                    <div style={{fontSize:'22px',fontWeight:900,color:'#1e293b',padding:'12px 0 10px'}}>Filter</div>
+
+                                    {/* Stok Row */}
+                                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 0',borderBottom:'1px solid #e2e8f0'}}>
+                                        <div>
+                                            <div style={{fontSize:'13px',fontWeight:700,color:'#1e293b'}}>Stok</div>
+                                            {tempFilterStok.length > 0 && tempFilterStok.length < 4 && <div style={{fontSize:'11px',color:'#0d9488',fontWeight:600,marginTop:'1px'}}>{tempFilterStok.map(v=>STOK_OPTS.find(o=>o.value===v)?.label).filter(Boolean).join(', ')}</div>}
+                                            {tempFilterStok.length === 4 && <div style={{fontSize:'11px',color:'#0d9488',fontWeight:600,marginTop:'1px'}}>Semua</div>}
+                                        </div>
+                                        <button onClick={() => setFilterSubPage('stok')}
+                                            style={{display:'flex',alignItems:'center',gap:'5px',padding:'5px 12px',borderRadius:'7px',border:'1.5px solid #0d9488',background:'#fff',color:'#0d9488',fontSize:'12px',fontWeight:700,cursor:'pointer'}}>
+                                            Ubah <Icon name="pen" style={{fontSize:'10px'}} />
+                                        </button>
+                                    </div>
+
+                                    {/* Prioritas Row */}
+                                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 0',borderBottom:'1px solid #e2e8f0'}}>
+                                        <div>
+                                            <div style={{fontSize:'13px',fontWeight:700,color:'#1e293b'}}>Prioritas</div>
+                                            {tempFilterPrioritas.length > 0 && tempFilterPrioritas.length < 4 && <div style={{fontSize:'11px',color:'#0d9488',fontWeight:600,marginTop:'1px'}}>{tempFilterPrioritas.map(v=>PRIORITAS_OPTS.find(o=>o.value===v)?.label).filter(Boolean).join(', ')}</div>}
+                                            {tempFilterPrioritas.length === 4 && <div style={{fontSize:'11px',color:'#0d9488',fontWeight:600,marginTop:'1px'}}>Semua</div>}
+                                        </div>
+                                        <button onClick={() => setFilterSubPage('prioritas')}
+                                            style={{display:'flex',alignItems:'center',gap:'5px',padding:'5px 12px',borderRadius:'7px',border:'1.5px solid #0d9488',background:'#fff',color:'#0d9488',fontSize:'12px',fontWeight:700,cursor:'pointer'}}>
+                                            Ubah <Icon name="pen" style={{fontSize:'10px'}} />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Table Header */}
+                    <div style={{display:'flex',alignItems:'center',borderBottom:'1px solid #000',paddingBottom:'10px',marginBottom:'4px',position:'sticky',top:'54px',background:'#fff',zIndex:10,marginLeft:'-16px',marginRight:'-16px',paddingLeft:'16px',paddingRight:'16px',paddingTop:'8px'}}>
+                        <div style={{width:'36px',flexShrink:0}}>
+                            <div onClick={toggleSelectAll} style={{width:'18px',height:'18px',border:'2px solid #0d9488',borderRadius:'4px',cursor:'pointer',background: selectAll ? '#0d9488' : '#fff',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                                {selectAll && <Icon name="check" className="text-white" style={{fontSize:'10px'}} />}
+                            </div>
+                        </div>
+                        {selectedItems.length > 0 ? (
+                            <div style={{flex:1,display:'flex',alignItems:'center',gap:'8px',paddingLeft:'26px'}}>
+                                <span style={{fontSize:'12px',fontWeight:700,color:'#475569'}}>{selectedItems.length} dipilih</span>
+                                <button
+                                    onClick={() => alert('Sesuaikan batch negatif untuk ' + selectedItems.length + ' barang')}
+                                    style={{display:'flex',alignItems:'center',gap:'5px',padding:'4px 10px',borderRadius:'6px',border:'1.5px solid #0d9488',background:'#f0fdfa',color:'#0d9488',fontSize:'11px',fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+                                    <Icon name="arrows-rotate" style={{fontSize:'10px'}} /> Sesuaikan Batch Negatif
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <div style={{flex:1,fontSize:'13px',fontWeight:800,color:'#475569',paddingLeft:'26px'}}>Barang</div>
+                                <div style={{fontSize:'13px',fontWeight:800,color:'#475569',textAlign:'right',minWidth:'40px'}}>Stok</div>
+                            </>
+                        )}
+                        {selectedItems.length > 0 && <div style={{fontSize:'13px',fontWeight:800,color:'#475569',textAlign:'right',minWidth:'40px'}}>Stok</div>}
+                    </div>
+
+                    {/* Items List */}
+                    {filteredItems.length === 0 ? (
+                        <div style={{textAlign:'center',padding:'40px 0',color:'#94a3b8'}}>
+                            <Icon name="box-open" className="text-4xl mb-2" /><br/>
+                            <span style={{fontSize:'13px',fontWeight:600}}>Tidak ada data</span>
+                        </div>
+                    ) : (() => {
+                        // Group by store when all_stores mode
+                        const renderItem = (item, index) => {
+                            const prioritas = getPrioritas(item);
+                            const pInfo = getPrioritasIcon(prioritas);
+                            const pLabel = getPrioritasLabel(prioritas);
+                            const isSelected = selectedItems.includes(item.id);
+                            const qty = Number(item.qty) || 0;
+                            const expFormatted = formatExpDate(item.exp);
+                            const daysLeft = getDaysRemainingLocal(item.exp);
+                            const isExpired = daysLeft !== null && daysLeft < 0;
+                            const isNearExp = daysLeft !== null && daysLeft < 90 && !isExpired;
+                            return (
+                                <div key={item.id} style={{display:'flex',alignItems:'flex-start',padding:'14px 0',borderBottom:'1px solid #f1f5f9',gap:'0'}}>
+                                    <div style={{width:'36px',flexShrink:0,paddingTop:'2px'}}>
+                                        <div onClick={(e) => { e.stopPropagation(); toggleSelectItem(item.id); }} style={{width:'18px',height:'18px',border:'2px solid ' + (isSelected ? '#0d9488' : '#cbd5e1'),borderRadius:'4px',cursor:'pointer',background: isSelected ? '#0d9488' : '#fff',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                                            {isSelected && <Icon name="check" className="text-white" style={{fontSize:'10px'}} />}
+                                        </div>
+                                    </div>
+                                    <div style={{flex:1,minWidth:0,display:'flex',alignItems:'flex-start',cursor:'pointer'}} onClick={() => setSelectedDetailItem(item)}>
+                                        <div style={{flex:1,minWidth:0}}>
+                                            <div style={{display:'flex',alignItems:'baseline',gap:'8px',marginBottom:'5px'}}>
+                                                <span style={{fontSize:'12px',color:'#1e293b',fontWeight:700,flexShrink:0,minWidth:'18px'}}>{index + 1}</span>
+                                                <span style={{fontSize:'14px',fontWeight:800,color:'#0d9488',lineHeight:1.25}}>{item.name}</span>
+                                            </div>
+                                            <div style={{display:'flex',flexWrap:'wrap',gap:'40px',paddingLeft:'26px'}}>
+                                                <div>
+                                                    <div style={{fontSize:'11px',fontWeight:700,color:'#64748b',marginBottom:'2px'}}>ED terdekat</div>
+                                                    <div style={{fontSize:'12px',fontWeight:600,color: isExpired ? '#dc2626' : (isNearExp ? '#d97706' : '#334155')}}>
+                                                        {expFormatted || '-'}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div style={{fontSize:'11px',fontWeight:700,color:'#64748b',marginBottom:'2px'}}>Prioritas</div>
+                                                    <div style={{display:'flex',alignItems:'center',gap:'5px'}}>
+                                                        <span style={{width:'18px',height:'18px',borderRadius:'50%',border:'1.5px solid ' + pInfo.border,background: pInfo.bg,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:'9px',fontWeight:900,color: pInfo.color,flexShrink:0}}>
+                                                            {pInfo.icon}
+                                                        </span>
+                                                        <span style={{fontSize:'12px',fontWeight:600,color:'#334155'}}>{pLabel}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div style={{minWidth:'40px',textAlign:'right',paddingTop:'2px',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'4px'}}>
+                                            <span style={{fontSize:'16px',fontWeight:900,color: qty <= 0 ? '#dc2626' : '#1e293b'}}>{qty}</span>
+                                            {qty > 0 && daysLeft !== null && daysLeft < 30 && (
+                                                <span style={{width:'18px',height:'18px',borderRadius:'50%',background:'#fef3c7',border:'1.5px solid #fbbf24',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:'10px'}}>⚠️</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        };
+
+                        if (!isAllStores) {
+                            return filteredItems.map((item, idx) => renderItem(item, idx));
+                        }
+
+                        // Group by storeId
+                        const grouped = {};
+                        const groupOrder = [];
+                        filteredItems.forEach(item => {
+                            const sid = item.storeId || 'default';
+                            if (!grouped[sid]) { grouped[sid] = []; groupOrder.push(sid); }
+                            grouped[sid].push(item);
+                        });
+
+                        return groupOrder.map(sid => (
+                            <div key={sid}>
+                                {/* Store header */}
+                                <div style={{display:'flex',alignItems:'center',gap:'8px',padding:'10px 0 6px',marginTop:'8px',borderBottom:'2px solid #0d9488',marginBottom:'2px'}}>
+                                    <Icon name="store" style={{color:'#0d9488',fontSize:'13px'}} />
+                                    <span style={{fontSize:'13px',fontWeight:900,color:'#0d9488'}}>{getStoreName(sid)}</span>
+                                    <span style={{fontSize:'11px',fontWeight:600,color:'#94a3b8',marginLeft:'auto'}}>{grouped[sid].length} barang</span>
+                                </div>
+                                {grouped[sid].map((item, idx) => renderItem(item, idx))}
+                            </div>
+                        ));
+                    })()}
+
+                    {filteredItems.length > 0 && (
+                        <div style={{textAlign:'center',padding:'16px 0',color:'#94a3b8',fontSize:'12px',fontWeight:600}}>
+                            Menampilkan {filteredItems.length} dari {items.length} barang
+                        </div>
+                    )}
+                </div>
+            );
+        };
+        // =================== END STOK VIEW ===================
+
         // =================== TRANSFER BARANG VIEW ===================
         const TransferBarangView = ({ user, showToast, rawInventory, settings, currentProfile, readOnly, authSession }) => {
             const [fromStore, setFromStore] = useState('');
@@ -16414,7 +16934,7 @@
             const handleSaveSettings = async (newSettings) => { if(!user) return; setSubmitting(true); try { const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'settings', 'global'); await window.setDoc(docRef, newSettings); showToast("Pengaturan disimpan"); } catch(error) { console.error(error); showToast("Gagal simpan pengaturan", "error"); } finally { setSubmitting(false); } };
             const handleDelete = async () => { if (!deleteModal.item || !user) return; try { const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', deleteModal.item.id); await window.deleteDoc(docRef); showToast("Barang dihapus (dari semua toko)"); } catch (error) { showToast("Gagal menghapus", "error"); } finally { setDeleteModal({ show: false, item: null }); } };
             const handleConfirmDeleteRack = async () => { if (!deleteRackModal.rackName || !user) return; const rackName = deleteRackModal.rackName; try { const batch = window.writeBatch(window.db); const itemsToUpdate = inventoryData.filter(item => item.rack && item.rack.includes(rackName)); if (itemsToUpdate.length === 0) { showToast("Tidak ada item di rak ini"); setDeleteRackModal({ show: false, rackName: null }); return; } itemsToUpdate.forEach(item => { const newRacks = item.rack.split(',').map(r => r.trim()).filter(r => r !== rackName); const newRackString = newRacks.length > 0 ? newRacks.join(', ') : '-'; const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id); batch.update(docRef, { rack: newRackString }); }); await batch.commit(); showToast(`Rak "${rackName}" berhasil dihapus`); setSelectedRacks([]); } catch (err) { console.error("Failed delete rack", err); showToast("Gagal menghapus rak", "error"); } finally { setDeleteRackModal({ show: false, rackName: null }); } };
-            const handleNavClick = (tabId, event) => { setActiveTab(tabId); if (tabId !== 'list') setShowOnlyLowStock(false); setIsSidebarOpen(false); if (['cashier','history','rekap_barang'].includes(tabId)) setKasirDropdownOpen(true); else setKasirDropdownOpen(false); if (['list','stock_opname','add','import','transfer_barang'].includes(tabId)) setBarangDropdownOpen(true); else setBarangDropdownOpen(false); if (['purchases'].includes(tabId)) setPembelianDropdownOpen(true); else setPembelianDropdownOpen(false); };
+            const handleNavClick = (tabId, event) => { setActiveTab(tabId); if (tabId !== 'list') setShowOnlyLowStock(false); setIsSidebarOpen(false); if (['cashier','history','rekap_barang'].includes(tabId)) setKasirDropdownOpen(true); else setKasirDropdownOpen(false); if (['list','stok_view','stock_opname','add','import','transfer_barang'].includes(tabId)) setBarangDropdownOpen(true); else setBarangDropdownOpen(false); if (['purchases'].includes(tabId)) setPembelianDropdownOpen(true); else setPembelianDropdownOpen(false); };
             
             const handleLogout = () => {
                 clearSession();
@@ -16459,7 +16979,7 @@
                 { id: 'history',     label: 'Riwayat',           icon: 'clock-rotate-left',  enabled: isOwner || showMenu('showMenuHistory', settingsData.showMenuHistory),    readOnly: !isOwner && !menuOn('enableHistory', settingsData.enableHistory) }, 
                 { id: 'purchases',   label: 'Faktur Pembelian',  icon: 'file-invoice-dollar', enabled: isOwner || showMenu('showMenuPurchases', settingsData.showMenuPurchases), readOnly: !isOwner && !menuOn('enablePurchases', settingsData.enablePurchases) }, 
                 { id: 'home',        label: 'Dashboard',         icon: 'chart-pie',           enabled: isOwner || showMenu('showMenuDashboard', settingsData.showMenuDashboard), readOnly: false }, 
-                { id: 'list',        label: 'Stok Barang',       icon: 'boxes-stacked',       enabled: isOwner || showMenu('showMenuStock', settingsData.showMenuStock),        readOnly: !isOwner && !menuOn('enableStock', settingsData.enableStock) }, 
+                { id: 'list',        label: 'Katalog',       icon: 'boxes-stacked',       enabled: isOwner || showMenu('showMenuStock', settingsData.showMenuStock),        readOnly: !isOwner && !menuOn('enableStock', settingsData.enableStock) }, 
                 { id: 'stock_opname',label: 'Stock Opname',      icon: 'clipboard-check',     enabled: isOwner || showMenu('showMenuStockOpname', settingsData.showMenuStockOpname), readOnly: !isOwner && !menuOn('enableStockOpname', settingsData.enableStockOpname) },
                 { id: 'cashbook',    label: 'Buku Kas',          icon: 'book',                enabled: isOwner || showMenu('showMenuCashbook', settingsData.showMenuCashbook),  readOnly: !isOwner && !menuOn('enableCashbook', settingsData.enableCashbook) },
                 { id: 'catatan',     label: 'Catatan',           icon: 'thumbtack',           enabled: isOwner || showMenu('showMenuCatatan', settingsData.showMenuCatatan),    readOnly: !isOwner && !menuOn('enableCatatan', settingsData.enableCatatan) },
@@ -16587,7 +17107,8 @@
                                     // --- BARANG: render sebagai dropdown group ---
                                     if (menu.id === 'list') {
                                         const barangSubItems = [
-                                            { id: 'list',            label: 'Stok Barang',    icon: 'boxes-stacked',  showKey: 'showMenuStock',         enableKey: 'enableStock' },
+                                            { id: 'list',            label: 'Katalog',    icon: 'boxes-stacked',  showKey: 'showMenuStock',         enableKey: 'enableStock' },
+                                            { id: 'stok_view',       label: 'Stok',           icon: 'layer-group',    showKey: 'showMenuStock',         enableKey: 'enableStock' },
                                             { id: 'stock_opname',    label: 'Stock Opname',   icon: 'clipboard-check',showKey: 'showMenuStockOpname',    enableKey: 'enableStockOpname' },
                                             { id: 'add',             label: 'Input Manual',   icon: 'pen-to-square',  showKey: 'showMenuAdd',            enableKey: 'enableInputManual' },
                                             { id: 'import',          label: 'Import Masal',   icon: 'file-import',    showKey: 'showMenuImport',         enableKey: 'enableImport' },
@@ -16689,7 +17210,7 @@
                                     // --- Sembunyikan "Riwayat" dari menu utama karena sudah masuk dropdown Kasir ---
                                     if (menu.id === 'history') return null;
                                     // --- Sembunyikan item-item yang sudah masuk dropdown Barang ---
-                                    if (['stock_opname','add','import','transfer_barang'].includes(menu.id)) return null;
+                                    if (['stock_opname','add','import','transfer_barang','stok_view'].includes(menu.id)) return null;
                                     // --- Menu biasa - farmacare teal style ---
                                     return (
                                         <div
@@ -16960,6 +17481,7 @@
                         {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', costPrice:'', minStock: '', defaultDiscount: '', defaultDiscountType: '%', packagePrices: []}); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='add')?.readOnly} />)}
                         {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='import')?.readOnly} />)}
                         {activeTab === 'stock_opname' && (<StockOpnameView items={inventoryData} user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='stock_opname')?.readOnly} isOwner={isOwner} />)}
+                        {activeTab === 'stok_view' && (<StokView items={inventoryData} currentProfile={currentProfile} settings={settingsData} readOnly={menuItems.find(m=>m.id==='stok_view')?.readOnly} isOwner={isOwner} />)}
                         {activeTab === 'rekam_medis' && (<RekamMedisView user={user} showToast={showToast} readOnly={menuItems.find(m=>m.id==='rekam_medis')?.readOnly} />)}
                         {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} authSession={authSession} onUpdateSession={(newSession) => { setAuthSession(newSession); saveSession(newSession); }} inventoryItems={inventoryData} />)}
                         {activeTab === 'pengguna_akun' && (<PenggunaAkunView authSession={authSession} onUpdateSession={(newSession) => { setAuthSession(newSession); saveSession(newSession); }} showToast={showToast} />)}
