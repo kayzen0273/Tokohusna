@@ -15077,6 +15077,501 @@
         // =================== END JADWAL SHIFT VIEW ===================
 
         // =================== STOK VIEW ===================
+        // ============================================================
+        // BATCH & ED VIEW - Kelola No. Batch dan Expiry Date
+        // ============================================================
+        const BatchEDView = ({ items, currentProfile, settings, readOnly, isOwner, user }) => {
+            const [searchQuery, setSearchQuery] = useState('');
+            const [sortBy, setSortBy] = useState('ed_asc'); // 'ed_asc' | 'ed_desc' | 'name_asc'
+            const [filterStatus, setFilterStatus] = useState('semua'); // 'semua' | '0-3' | '3-6' | '6-12' | 'expired'
+            const [detailFilter, setDetailFilter] = useState(null); // null or one of the filter keys
+            const [showDetailPage, setShowDetailPage] = useState(false);
+            const [downloadLoading, setDownloadLoading] = useState(false);
+            // Filter page state
+            const [showFilterPage, setShowFilterPage] = useState(false);
+            const [filterSubPage, setFilterSubPage] = useState(null); // null | 'ed' | 'supplier'
+            const [tempFilterED, setTempFilterED] = useState([]);
+            const [tempFilterSupplier, setTempFilterSupplier] = useState([]);
+            const [activeFilterED, setActiveFilterED] = useState([]);
+            const [activeFilterSupplier, setActiveFilterSupplier] = useState([]);
+            const [selectedBatch, setSelectedBatch] = useState(null); // item detail page
+
+            const today = new Date();
+            today.setHours(0,0,0,0);
+
+            // Build batch list from inventory items
+            const allBatches = React.useMemo(() => {
+                const result = [];
+                (items || []).forEach(item => {
+                    const exp = item.exp ? new Date(item.exp) : null;
+                    const batchNo = item.batchNo || item.batch_no || '';
+                    const stok = (item.qty || 0);
+                    let status = 'no_exp';
+                    let daysLeft = null;
+                    if (exp && !isNaN(exp)) {
+                        exp.setHours(0,0,0,0);
+                        daysLeft = Math.floor((exp - today) / (1000 * 60 * 60 * 24));
+                        if (daysLeft < 0) status = 'expired';
+                        else if (daysLeft <= 90) status = '0-3';
+                        else if (daysLeft <= 180) status = '3-6';
+                        else if (daysLeft <= 365) status = '6-12';
+                        else status = '>12';
+                    }
+                    if (!item.exp && !batchNo) return; // skip items with no batch/exp info
+                    result.push({
+                        id: item.id,
+                        name: item.name || '-',
+                        batchNo: batchNo || '-',
+                        exp: item.exp || null,
+                        expDate: exp,
+                        daysLeft,
+                        status,
+                        stok,
+                        unit: item.unit || 'pcs',
+                        supplier: item.supplier || '-',
+                        invoiceNo: item.invoiceNo || item.invoice_no || '-',
+                        price: item.price || 0,
+                        costPrice: item.costPrice || item.cost_price || 0,
+                        defaultDiscount: item.defaultDiscount || 0,
+                        defaultDiscountType: item.defaultDiscountType || '%',
+                        packagePrices: item.packagePrices || [],
+                        rack: item.rack || '-',
+                        minStock: item.minStock || 0,
+                    });
+                });
+                return result;
+            }, [items]);
+
+            const counts = React.useMemo(() => ({
+                '0-3': allBatches.filter(b => b.status === '0-3').length,
+                '3-6': allBatches.filter(b => b.status === '3-6').length,
+                '6-12': allBatches.filter(b => b.status === '6-12').length,
+                'expired': allBatches.filter(b => b.status === 'expired').length,
+            }), [allBatches]);
+
+            const formatExp = (dateStr) => {
+                if (!dateStr) return '-';
+                const d = new Date(dateStr);
+                if (isNaN(d)) return dateStr;
+                return d.toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' });
+            };
+
+            const getStatusBadge = (status, daysLeft) => {
+                if (status === 'expired') return { label: 'Kedaluwarsa', bg: '#fee2e2', color: '#b91c1c', border: '#fca5a5', icon: 'circle-exclamation' };
+                if (status === '0-3') return { label: `${daysLeft} hari lagi`, bg: '#fff7ed', color: '#c2410c', border: '#fed7aa', icon: 'triangle-exclamation' };
+                if (status === '3-6') return { label: `${daysLeft} hari lagi`, bg: '#fefce8', color: '#a16207', border: '#fde68a', icon: 'clock' };
+                if (status === '6-12') return { label: `${daysLeft} hari lagi`, bg: '#f0fdf4', color: '#15803d', border: '#86efac', icon: 'check' };
+                return { label: '>12 bln', bg: '#f0fdf4', color: '#15803d', border: '#86efac', icon: 'check' };
+            };
+
+            const [allSuppliers, setAllSuppliers] = useState([]);
+            useEffect(() => {
+                if (!user) return;
+                const q = window.query(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'suppliers'), window.orderBy('name', 'asc'));
+                const unsub = window.onSnapshot(q, (snapshot) => {
+                    setAllSuppliers(snapshot.docs.map(doc => doc.data().name).filter(Boolean));
+                });
+                return () => unsub();
+            }, [user]);
+
+            const ED_OPTS = [
+                { value: '0-3', label: 'ED dalam 0-3 bulan' },
+                { value: '3-6', label: 'ED dalam 3-6 bulan' },
+                { value: '6-12', label: 'ED dalam 6-12 bulan' },
+                { value: 'expired', label: 'Sudah kedaluwarsa' },
+            ];
+
+            const filtered = React.useMemo(() => {
+                let data = [...allBatches];
+                const q = searchQuery.toLowerCase().trim();
+                if (q) data = data.filter(b => b.name.toLowerCase().includes(q) || b.batchNo.toLowerCase().includes(q) || (b.invoiceNo || '').toLowerCase().includes(q));
+                const sf = detailFilter || filterStatus;
+                if (sf !== 'semua') data = data.filter(b => b.status === sf);
+                if (activeFilterED.length > 0) data = data.filter(b => activeFilterED.includes(b.status));
+                if (activeFilterSupplier.length > 0) data = data.filter(b => activeFilterSupplier.includes(b.supplier));
+                if (sortBy === 'ed_asc') data.sort((a,b) => (a.daysLeft??99999) - (b.daysLeft??99999));
+                else if (sortBy === 'ed_desc') data.sort((a,b) => (b.daysLeft??99999) - (a.daysLeft??99999));
+                else data.sort((a,b) => a.name.localeCompare(b.name));
+                return data;
+            }, [allBatches, searchQuery, filterStatus, detailFilter, sortBy, activeFilterED, activeFilterSupplier]);
+
+            const handleUnduh = () => {
+                setDownloadLoading(true);
+                const rows = [['No','Barang','No. Batch','Expiry Date','Stok','Status']];
+                filtered.forEach((b,i) => rows.push([i+1, b.name, b.batchNo, formatExp(b.exp), `${b.stok} ${b.unit}`, b.status === 'expired' ? 'Kedaluwarsa' : b.status === '0-3' ? 'ED <3 bln' : b.status === '3-6' ? 'ED 3-6 bln' : b.status === '6-12' ? 'ED 6-12 bln' : 'Aman']));
+                const csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+                const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = 'batch_ed_' + new Date().toISOString().slice(0,10) + '.csv'; a.click();
+                URL.revokeObjectURL(url);
+                setTimeout(() => setDownloadLoading(false), 800);
+            };
+
+            // Item detail page - pakai ProductDetailPage yang sudah ada
+            if (selectedBatch) {
+                const fullItem = (items || []).find(i => i.id === selectedBatch.id) || selectedBatch;
+                return (
+                    <ProductDetailPage
+                        item={fullItem}
+                        onBack={() => setSelectedBatch(null)}
+                        onEdit={() => {}}
+                        onDelete={() => {}}
+                        settings={settings}
+                        readOnly={true}
+                        isOwner={isOwner}
+                        lowStockThreshold={settings.lowStockThreshold || 5}
+                        currentProfile={currentProfile}
+                        onNavigateToPurchases={() => {}}
+                        onNavigateToHistory={() => {}}
+                    />
+                );
+            }
+            // Detail page for a specific filter
+            if (showDetailPage && detailFilter) {
+                const titles = { '0-3': 'ED dalam >0-3 bulan', '3-6': 'ED dalam >3-6 bulan', '6-12': 'ED dalam >6-12 bulan', 'expired': 'Sudah Kedaluwarsa' };
+                return (
+                    <div className="min-h-screen bg-white flex flex-col">
+                        {/* Header */}
+                        <div className="flex items-center gap-3 px-4 pt-5 pb-3 bg-white border-b border-slate-100">
+                            <button onClick={() => { setShowDetailPage(false); setDetailFilter(null); }} className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-500 shadow-sm active:scale-95 transition-all flex-shrink-0">
+                                <Icon name="arrow-left" />
+                            </button>
+                            <div className="flex-1">
+                                <h1 className="text-base font-bold text-slate-800">{titles[detailFilter]}</h1>
+                                <p className="text-xs text-slate-500">{filtered.length} batch ditemukan</p>
+                            </div>
+                            <button onClick={handleUnduh} className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-teal-200 text-teal-700 text-xs font-bold bg-teal-50 active:scale-95 transition-all">
+                                <Icon name="cloud-arrow-down" />{downloadLoading ? 'Mengunduh...' : 'Unduh'}
+                            </button>
+                        </div>
+                        {/* Search */}
+                        <div className="px-4 py-3 bg-white">
+                            <div className="flex gap-2">
+                                <div className="flex-1 flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2.5 bg-white shadow-sm">
+                                    <Icon name="magnifying-glass" className="text-slate-400 text-sm flex-shrink-0" />
+                                    <input type="text" className="flex-1 text-sm outline-none bg-transparent text-slate-700 placeholder-slate-400" placeholder="Cari barang atau no. batch..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                                </div>
+                                <button className="px-3 py-2 rounded-xl border border-teal-500 text-teal-600 text-xs font-bold bg-white">Cari</button>
+                            </div>
+                        </div>
+                        {/* Sort */}
+                        <div className="px-4 pb-3 flex gap-2">
+                            <div className="flex-1">
+                                <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 text-slate-700 font-semibold bg-white outline-none">
+                                    <option value="ed_asc">ED Terdekat</option>
+                                    <option value="ed_desc">ED Terjauh</option>
+                                    <option value="name_asc">Nama A-Z</option>
+                                </select>
+                            </div>
+                        </div>
+                        {/* List */}
+                        <div className="flex-1 px-4 pb-6">
+                            {filtered.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                                    <Icon name="box-open" className="text-4xl mb-3" />
+                                    <p className="font-semibold text-sm">Tidak ada data</p>
+                                </div>
+                            ) : (
+                                <div>
+                                    <div className="flex items-center pb-2 border-b border-slate-100" style={{position:'sticky',top:'54px',background:'#fff',zIndex:10,marginLeft:'-16px',marginRight:'-16px',paddingLeft:'16px',paddingRight:'16px',paddingTop:'8px'}}>
+                                        <span className="text-xs text-slate-400 font-semibold w-5 flex-shrink-0"></span>
+                                        <span className="text-xs font-bold text-black uppercase tracking-wide flex-1">No. batch</span>
+                                    </div>
+                                    {filtered.map((b, idx) => {
+                                        const badge = getStatusBadge(b.status, b.daysLeft);
+                                        return (
+                                            <div key={b.id + idx} className="py-4 border-b border-slate-50 cursor-pointer active:bg-slate-50 transition-colors" onClick={() => setSelectedBatch(b)}>
+                                                <div className="flex items-start gap-2 mb-2">
+                                                    <span className="text-xs text-black font-semibold w-5 flex-shrink-0 mt-0.5">{idx+1}</span>
+                                                    <div className="flex-1">
+                                                        <p className="text-sm font-bold text-teal-700">{b.batchNo}</p>
+                                                        <p className="text-xs text-slate-500">{b.status === 'expired' ? 'ED ' + formatExp(b.exp) : 'ED ' + formatExp(b.exp)}</p>
+                                                    </div>
+                                                    <Icon name="chevron-right" className="text-xs text-slate-300 mt-1 flex-shrink-0" />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-x-4 gap-y-2 ml-7">
+                                                    <div>
+                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">Barang</p>
+                                                        <p className="text-xs font-semibold text-slate-800">{b.name}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">No. Faktur</p>
+                                                        <p className="text-xs font-semibold text-teal-700">{b.invoiceNo !== '-' ? b.invoiceNo : <span className="text-slate-400">-</span>}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">Stok</p>
+                                                        <p className="text-xs font-semibold text-slate-800">{b.stok} {b.unit}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">Supplier</p>
+                                                        <p className="text-xs font-semibold text-slate-800">{b.supplier !== '-' ? b.supplier : <span className="text-slate-400">-</span>}</p>
+                                                    </div>
+                                                    <div className="col-span-2">
+                                                        <p className="text-[10px] font-bold text-slate-500 mb-0.5">Status</p>
+                                                        <span style={{background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`}} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold">
+                                                            <Icon name={badge.icon} className="text-[9px]" /> {badge.label}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            }
+
+            // Main page
+            return (
+                <div className="min-h-screen bg-white flex flex-col">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-4 pt-5 pb-4">
+                        <h1 className="text-2xl font-black text-slate-800">Batch &amp; ED</h1>
+                        <button onClick={handleUnduh} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-teal-500 text-teal-700 text-sm font-bold bg-white shadow-sm active:scale-95 transition-all">
+                            <Icon name="cloud-arrow-down" />{downloadLoading ? 'Mengunduh...' : 'Unduh'}
+                        </button>
+                    </div>
+
+                    {/* Summary Cards */}
+                    <div className="px-4 pb-4 space-y-5">
+                        {/* 0-3 bulan */}
+                        <div>
+                            <p className="text-sm font-bold text-slate-700 mb-1">ED dalam &gt;0-3 bulan</p>
+                            <p className="text-2xl font-black text-slate-800 leading-none mb-1">{counts['0-3']} <span className="text-base font-bold text-slate-600">batch</span></p>
+                            <button onClick={() => { setDetailFilter('0-3'); setShowDetailPage(true); }} className="flex items-center gap-1 text-teal-600 text-sm font-bold hover:underline active:opacity-70">
+                                Lihat detail <Icon name="arrow-right" />
+                            </button>
+                        </div>
+                        <div className="h-px bg-slate-100" />
+                        {/* 3-6 bulan */}
+                        <div>
+                            <p className="text-sm font-bold text-slate-700 mb-1">ED dalam &gt;3-6 bulan</p>
+                            <p className="text-2xl font-black text-slate-800 leading-none mb-1">{counts['3-6']} <span className="text-base font-bold text-slate-600">batch</span></p>
+                            <button onClick={() => { setDetailFilter('3-6'); setShowDetailPage(true); }} className="flex items-center gap-1 text-teal-600 text-sm font-bold hover:underline active:opacity-70">
+                                Lihat detail <Icon name="arrow-right" />
+                            </button>
+                        </div>
+                        <div className="h-px bg-slate-100" />
+                        {/* 6-12 bulan */}
+                        <div>
+                            <p className="text-sm font-bold text-slate-700 mb-1">ED dalam &gt;6-12 bulan</p>
+                            <p className="text-2xl font-black text-slate-800 leading-none mb-1">{counts['6-12']} <span className="text-base font-bold text-slate-600">batch</span></p>
+                            <button onClick={() => { setDetailFilter('6-12'); setShowDetailPage(true); }} className="flex items-center gap-1 text-teal-600 text-sm font-bold hover:underline active:opacity-70">
+                                Lihat detail <Icon name="arrow-right" />
+                            </button>
+                        </div>
+                        <div className="h-px bg-slate-100" />
+                        {/* Sudah kedaluwarsa */}
+                        <div>
+                            <p className="text-sm font-bold text-slate-700 mb-1">Sudah kedaluwarsa</p>
+                            <p className="text-2xl font-black text-slate-800 leading-none mb-1">{counts['expired']} <span className="text-base font-bold text-slate-600">batch</span></p>
+                            <button onClick={() => { setDetailFilter('expired'); setShowDetailPage(true); }} className="flex items-center gap-1 text-teal-600 text-sm font-bold hover:underline active:opacity-70">
+                                Lihat detail <Icon name="arrow-right" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Search & Filter */}
+                    <div className="px-4 pb-3 border-t border-slate-100 pt-4">
+                        <div className="flex gap-2 mb-3">
+                            <div className="flex-1 flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2.5 bg-white shadow-sm">
+                                <Icon name="magnifying-glass" className="text-slate-400 text-sm flex-shrink-0" />
+                                <input type="text" className="flex-1 text-sm outline-none bg-transparent text-slate-700 placeholder-slate-400" placeholder="Cari barang atau no. batch..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                            </div>
+                            <button className="px-3 py-2 rounded-xl border border-teal-500 text-teal-600 text-xs font-bold bg-white">Cari</button>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => { setTempFilterED([...activeFilterED]); setTempFilterSupplier([...activeFilterSupplier]); setFilterSubPage(null); setShowFilterPage(true); }} className={"flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border text-xs font-bold bg-white shadow-sm " + ((activeFilterED.length > 0 || activeFilterSupplier.length > 0) ? 'border-teal-500 text-teal-600' : 'border-slate-200 text-slate-600')}>
+                                <Icon name="sliders" /> Filter {(activeFilterED.length > 0 || activeFilterSupplier.length > 0) && <span style={{width:'7px',height:'7px',borderRadius:'50%',background:'#0d9488',display:'inline-block',marginLeft:'2px'}}></span>}
+                            </button>
+                            <div className="flex-1">
+                                <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 text-slate-700 font-semibold bg-white outline-none shadow-sm">
+                                    <option value="ed_asc">ED Terdekat</option>
+                                    <option value="ed_desc">ED Terjauh</option>
+                                    <option value="name_asc">Nama A-Z</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Batch List */}
+                    <div className="flex-1 px-4 pb-8">
+                        {allBatches.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                                <Icon name="box-open" className="text-4xl mb-3" />
+                                <p className="font-semibold text-sm">Belum ada data batch &amp; ED</p>
+                                <p className="text-xs mt-1 text-center max-w-xs">Masukkan No. Batch &amp; Expiry Date saat menginput faktur pembelian</p>
+                            </div>
+                        ) : (
+                            <div>
+                                <div className="flex items-center pb-2 border-b border-slate-100 mb-1" style={{position:'sticky',top:'54px',background:'#fff',zIndex:10,marginLeft:'-16px',marginRight:'-16px',paddingLeft:'16px',paddingRight:'16px',paddingTop:'8px'}}>
+                                    <span className="text-xs text-slate-400 font-semibold w-5 flex-shrink-0"></span>
+                                    <span className="text-xs font-bold text-black uppercase tracking-wide flex-1">No. batch</span>
+                                </div>
+                                {filtered.map((b, idx) => {
+                                    const badge = getStatusBadge(b.status, b.daysLeft);
+                                    return (
+                                        <div key={b.id + idx} className="py-4 border-b border-slate-50 cursor-pointer active:bg-slate-50 transition-colors" onClick={() => setSelectedBatch(b)}>
+                                            <div className="flex items-start gap-2 mb-2">
+                                                <span className="text-xs text-black font-semibold w-5 flex-shrink-0 mt-0.5">{idx+1}</span>
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-bold text-teal-700">{b.batchNo}</p>
+                                                    <p className="text-xs text-slate-500">ED {formatExp(b.exp)}</p>
+                                                </div>
+                                                <Icon name="chevron-right" className="text-xs text-slate-300 mt-1 flex-shrink-0" />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-x-4 gap-y-2 ml-7">
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-slate-500 mb-0.5">Barang</p>
+                                                    <p className="text-xs font-semibold text-slate-800">{b.name}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-slate-500 mb-0.5">No. Faktur</p>
+                                                    <p className="text-xs font-semibold text-teal-700">{b.invoiceNo !== '-' ? b.invoiceNo : <span className="text-slate-400">-</span>}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-slate-500 mb-0.5">Stok</p>
+                                                    <p className="text-xs font-semibold text-slate-800">{b.stok} {b.unit}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-slate-500 mb-0.5">Supplier</p>
+                                                    <p className="text-xs font-semibold text-slate-800">{b.supplier !== '-' ? b.supplier : <span className="text-slate-400">-</span>}</p>
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <p className="text-[10px] font-bold text-slate-500 mb-0.5">Status</p>
+                                                    <span style={{background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`}} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold">
+                                                        <Icon name={badge.icon} className="text-[9px]" /> {badge.label}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Filter Page Overlay */}
+                    {showFilterPage && (
+                        <div style={{position:'fixed',inset:0,background:'#fff',zIndex:120,display:'flex',flexDirection:'column',overflowY:'auto'}}>
+                            {/* Header */}
+                            {filterSubPage === null && (
+                                <>
+                                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderBottom:'1px solid #f1f5f9',position:'sticky',top:0,background:'#fff',zIndex:10}}>
+                                        <button onClick={() => { setShowFilterPage(false); setFilterSubPage(null); }} style={{display:'flex',alignItems:'center',gap:'6px',background:'none',border:'none',cursor:'pointer',color:'#1e293b',fontSize:'14px',fontWeight:700,padding:0}}>
+                                            <Icon name="xmark" style={{fontSize:'18px'}} /> Batch &amp; ED
+                                        </button>
+                                        <button onClick={() => { setActiveFilterED([...tempFilterED]); setActiveFilterSupplier([...tempFilterSupplier]); setShowFilterPage(false); setFilterSubPage(null); }}
+                                            style={{background:'#0d9488',color:'#fff',border:'none',borderRadius:'8px',padding:'8px 20px',fontSize:'13px',fontWeight:800,cursor:'pointer'}}>Pasang</button>
+                                    </div>
+                                    <div style={{padding:'20px 16px 8px'}}>
+                                        <h2 style={{fontSize:'28px',fontWeight:900,color:'#1e293b',margin:0}}>Filter</h2>
+                                    </div>
+                                    <div style={{padding:'0 16px'}}>
+                                        {/* ED Row */}
+                                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 0',borderBottom:'1px solid #f1f5f9'}}>
+                                            <div>
+                                                <p style={{fontSize:'14px',fontWeight:600,color:'#1e293b',margin:0}}>ED</p>
+                                                {tempFilterED.length > 0 && <p style={{fontSize:'11px',color:'#0d9488',margin:'2px 0 0',fontWeight:600}}>{tempFilterED.length} dipilih</p>}
+                                            </div>
+                                            <button onClick={() => setFilterSubPage('ed')} style={{display:'flex',alignItems:'center',gap:'6px',background:'none',border:'1px solid #e2e8f0',borderRadius:'10px',padding:'8px 16px',fontSize:'13px',fontWeight:700,cursor:'pointer',color:'#1e293b'}}>
+                                                Ubah <Icon name="pen-to-square" style={{color:'#0d9488'}} />
+                                            </button>
+                                        </div>
+                                        {/* Supplier Row */}
+                                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 0',borderBottom:'1px solid #f1f5f9'}}>
+                                            <div>
+                                                <p style={{fontSize:'14px',fontWeight:600,color:'#1e293b',margin:0}}>Supplier</p>
+                                                {tempFilterSupplier.length > 0 && <p style={{fontSize:'11px',color:'#0d9488',margin:'2px 0 0',fontWeight:600}}>{tempFilterSupplier.length} dipilih</p>}
+                                            </div>
+                                            <button onClick={() => setFilterSubPage('supplier')} style={{display:'flex',alignItems:'center',gap:'6px',background:'none',border:'1px solid #e2e8f0',borderRadius:'10px',padding:'8px 16px',fontSize:'13px',fontWeight:700,cursor:'pointer',color:'#1e293b'}}>
+                                                Ubah <Icon name="pen-to-square" style={{color:'#0d9488'}} />
+                                            </button>
+                                        </div>
+                                        {/* Reset */}
+                                        {(tempFilterED.length > 0 || tempFilterSupplier.length > 0) && (
+                                            <button onClick={() => { setTempFilterED([]); setTempFilterSupplier([]); }} style={{marginTop:'16px',background:'none',border:'none',cursor:'pointer',color:'#ef4444',fontSize:'13px',fontWeight:700,padding:0}}>
+                                                <Icon name="rotate-left" /> Reset semua filter
+                                            </button>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+
+                            {/* Sub-page: ED */}
+                            {filterSubPage === 'ed' && (
+                                <>
+                                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderBottom:'1px solid #f1f5f9',position:'sticky',top:0,background:'#fff',zIndex:10}}>
+                                        <button onClick={() => setFilterSubPage(null)} style={{background:'none',border:'none',cursor:'pointer',padding:0,color:'#0d9488',fontSize:'20px',lineHeight:1}}><Icon name="arrow-left" /></button>
+                                        <button onClick={() => { setActiveFilterED([...tempFilterED]); setActiveFilterSupplier([...tempFilterSupplier]); setShowFilterPage(false); setFilterSubPage(null); }}
+                                            style={{background:'#0d9488',color:'#fff',border:'none',borderRadius:'8px',padding:'7px 18px',fontSize:'13px',fontWeight:800,cursor:'pointer'}}>Pasang</button>
+                                    </div>
+                                    <div style={{padding:'16px'}}>
+                                        <h3 style={{fontSize:'16px',fontWeight:800,color:'#1e293b',marginBottom:'16px'}}>Pilih Status ED</h3>
+                                        {/* Pilih semua */}
+                                        <div onClick={() => setTempFilterED(tempFilterED.length === ED_OPTS.length ? [] : ED_OPTS.map(o=>o.value))}
+                                            style={{display:'flex',alignItems:'center',gap:'14px',padding:'13px 0',borderBottom:'2px solid #e2e8f0',cursor:'pointer',marginBottom:'4px'}}>
+                                            <div style={{width:'20px',height:'20px',borderRadius:'4px',border:`2px solid ${tempFilterED.length===ED_OPTS.length ? '#0d9488' : '#94a3b8'}`,background: tempFilterED.length===ED_OPTS.length ? '#0d9488' : '#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                                {tempFilterED.length===ED_OPTS.length && <Icon name="check" style={{color:'#fff',fontSize:'11px'}} />}
+                                            </div>
+                                            <span style={{fontSize:'14px',fontWeight:700,color:'#1e293b'}}>Semua</span>
+                                        </div>
+                                        {ED_OPTS.map(opt => (
+                                            <div key={opt.value} onClick={() => setTempFilterED(tempFilterED.includes(opt.value) ? tempFilterED.filter(x=>x!==opt.value) : [...tempFilterED, opt.value])}
+                                                style={{display:'flex',alignItems:'center',gap:'14px',padding:'13px 0',borderBottom:'1px solid #f1f5f9',cursor:'pointer'}}>
+                                                <div style={{width:'20px',height:'20px',borderRadius:'4px',border:`2px solid ${tempFilterED.includes(opt.value) ? '#0d9488' : '#94a3b8'}`,background: tempFilterED.includes(opt.value) ? '#0d9488' : '#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                                    {tempFilterED.includes(opt.value) && <Icon name="check" style={{color:'#fff',fontSize:'11px'}} />}
+                                                </div>
+                                                <span style={{fontSize:'14px',fontWeight:600,color:'#334155'}}>{opt.label}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+
+                            {/* Sub-page: Supplier */}
+                            {filterSubPage === 'supplier' && (
+                                <>
+                                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderBottom:'1px solid #f1f5f9',position:'sticky',top:0,background:'#fff',zIndex:10}}>
+                                        <button onClick={() => setFilterSubPage(null)} style={{background:'none',border:'none',cursor:'pointer',padding:0,color:'#0d9488',fontSize:'20px',lineHeight:1}}><Icon name="arrow-left" /></button>
+                                        <button onClick={() => { setActiveFilterED([...tempFilterED]); setActiveFilterSupplier([...tempFilterSupplier]); setShowFilterPage(false); setFilterSubPage(null); }}
+                                            style={{background:'#0d9488',color:'#fff',border:'none',borderRadius:'8px',padding:'7px 18px',fontSize:'13px',fontWeight:800,cursor:'pointer'}}>Pasang</button>
+                                    </div>
+                                    <div style={{padding:'16px'}}>
+                                        <h3 style={{fontSize:'16px',fontWeight:800,color:'#1e293b',marginBottom:'16px'}}>Pilih Supplier</h3>
+                                        {allSuppliers.length === 0 ? (
+                                            <p style={{color:'#94a3b8',fontSize:'13px',textAlign:'center',paddingTop:'24px'}}>Tidak ada data supplier</p>
+                                        ) : (
+                                            <>
+                                                <div onClick={() => setTempFilterSupplier(tempFilterSupplier.length === allSuppliers.length ? [] : [...allSuppliers])}
+                                                    style={{display:'flex',alignItems:'center',gap:'14px',padding:'13px 0',borderBottom:'2px solid #e2e8f0',cursor:'pointer',marginBottom:'4px'}}>
+                                                    <div style={{width:'20px',height:'20px',borderRadius:'4px',border:`2px solid ${tempFilterSupplier.length===allSuppliers.length ? '#0d9488' : '#94a3b8'}`,background: tempFilterSupplier.length===allSuppliers.length ? '#0d9488' : '#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                                        {tempFilterSupplier.length===allSuppliers.length && <Icon name="check" style={{color:'#fff',fontSize:'11px'}} />}
+                                                    </div>
+                                                    <span style={{fontSize:'14px',fontWeight:700,color:'#1e293b'}}>Semua</span>
+                                                </div>
+                                                {allSuppliers.map(sup => (
+                                                    <div key={sup} onClick={() => setTempFilterSupplier(tempFilterSupplier.includes(sup) ? tempFilterSupplier.filter(x=>x!==sup) : [...tempFilterSupplier, sup])}
+                                                        style={{display:'flex',alignItems:'center',gap:'14px',padding:'13px 0',borderBottom:'1px solid #f1f5f9',cursor:'pointer'}}>
+                                                        <div style={{width:'20px',height:'20px',borderRadius:'4px',border:`2px solid ${tempFilterSupplier.includes(sup) ? '#0d9488' : '#94a3b8'}`,background: tempFilterSupplier.includes(sup) ? '#0d9488' : '#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                                            {tempFilterSupplier.includes(sup) && <Icon name="check" style={{color:'#fff',fontSize:'11px'}} />}
+                                                        </div>
+                                                        <span style={{fontSize:'14px',fontWeight:600,color:'#334155'}}>{sup}</span>
+                                                    </div>
+                                                ))}
+                                            </>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
         const StokView = ({ items, currentProfile, settings, readOnly, isOwner }) => {
             const isAllStores = currentProfile?.id === 'all_stores';
             const storeProfiles = settings?.storeProfiles || [];
@@ -16934,7 +17429,7 @@
             const handleSaveSettings = async (newSettings) => { if(!user) return; setSubmitting(true); try { const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'settings', 'global'); await window.setDoc(docRef, newSettings); showToast("Pengaturan disimpan"); } catch(error) { console.error(error); showToast("Gagal simpan pengaturan", "error"); } finally { setSubmitting(false); } };
             const handleDelete = async () => { if (!deleteModal.item || !user) return; try { const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', deleteModal.item.id); await window.deleteDoc(docRef); showToast("Barang dihapus (dari semua toko)"); } catch (error) { showToast("Gagal menghapus", "error"); } finally { setDeleteModal({ show: false, item: null }); } };
             const handleConfirmDeleteRack = async () => { if (!deleteRackModal.rackName || !user) return; const rackName = deleteRackModal.rackName; try { const batch = window.writeBatch(window.db); const itemsToUpdate = inventoryData.filter(item => item.rack && item.rack.includes(rackName)); if (itemsToUpdate.length === 0) { showToast("Tidak ada item di rak ini"); setDeleteRackModal({ show: false, rackName: null }); return; } itemsToUpdate.forEach(item => { const newRacks = item.rack.split(',').map(r => r.trim()).filter(r => r !== rackName); const newRackString = newRacks.length > 0 ? newRacks.join(', ') : '-'; const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id); batch.update(docRef, { rack: newRackString }); }); await batch.commit(); showToast(`Rak "${rackName}" berhasil dihapus`); setSelectedRacks([]); } catch (err) { console.error("Failed delete rack", err); showToast("Gagal menghapus rak", "error"); } finally { setDeleteRackModal({ show: false, rackName: null }); } };
-            const handleNavClick = (tabId, event) => { setActiveTab(tabId); if (tabId !== 'list') setShowOnlyLowStock(false); setIsSidebarOpen(false); if (['cashier','history','rekap_barang'].includes(tabId)) setKasirDropdownOpen(true); else setKasirDropdownOpen(false); if (['list','stok_view','stock_opname','add','import','transfer_barang'].includes(tabId)) setBarangDropdownOpen(true); else setBarangDropdownOpen(false); if (['purchases'].includes(tabId)) setPembelianDropdownOpen(true); else setPembelianDropdownOpen(false); };
+            const handleNavClick = (tabId, event) => { setActiveTab(tabId); if (tabId !== 'list') setShowOnlyLowStock(false); setIsSidebarOpen(false); if (['cashier','history','rekap_barang'].includes(tabId)) setKasirDropdownOpen(true); else setKasirDropdownOpen(false); if (['list','stok_view','stock_opname','add','import','transfer_barang','batch_ed'].includes(tabId)) setBarangDropdownOpen(true); else setBarangDropdownOpen(false); if (['purchases'].includes(tabId)) setPembelianDropdownOpen(true); else setPembelianDropdownOpen(false); };
             
             const handleLogout = () => {
                 clearSession();
@@ -16988,6 +17483,7 @@
                 { id: 'rekam_medis', label: 'Rekam Medis',       icon: 'stethoscope',         enabled: isOwner || showMenu('showMenuRekamMedis', settingsData.showMenuRekamMedis), readOnly: !isOwner && !menuOn('enableRekamMedis', settingsData.enableRekamMedis) },
                 { id: 'jadwal_shift', label: 'Jadwal Shift',     icon: 'calendar-days',       enabled: isOwner || showMenu('showMenuJadwalShift', settingsData.showMenuJadwalShift), readOnly: !isOwner && !menuOn('enableJadwalShift', settingsData.enableJadwalShift) },
                 { id: 'transfer_barang', label: 'Transfer Barang', icon: 'right-left',         enabled: isOwner || showMenu('showMenuTransferBarang', settingsData.showMenuTransferBarang), readOnly: !isOwner && !menuOn('enableTransferBarang', settingsData.enableTransferBarang) },
+                { id: 'batch_ed',        label: 'Batch & ED',      icon: 'calendar-days',       enabled: isOwner || showMenu('showMenuBatchED', settingsData.showMenuBatchED),             readOnly: !isOwner && !menuOn('enableBatchED', settingsData.enableBatchED) },
                 { id: 'pengguna_akun', label: 'Pengguna Akun',   icon: 'users',               enabled: true, readOnly: false },
                 { id: 'settings',    label: 'Pengaturan',        icon: 'gears',               enabled: true, readOnly: false },
             ];
@@ -17109,6 +17605,7 @@
                                         const barangSubItems = [
                                             { id: 'list',            label: 'Katalog',    icon: 'boxes-stacked',  showKey: 'showMenuStock',         enableKey: 'enableStock' },
                                             { id: 'stok_view',       label: 'Stok',           icon: 'layer-group',    showKey: 'showMenuStock',         enableKey: 'enableStock' },
+                                            { id: 'batch_ed',        label: 'Batch & ED',    icon: 'calendar-days',  showKey: 'showMenuBatchED',        enableKey: 'enableBatchED' },
                                             { id: 'stock_opname',    label: 'Stock Opname',   icon: 'clipboard-check',showKey: 'showMenuStockOpname',    enableKey: 'enableStockOpname' },
                                             { id: 'add',             label: 'Input Manual',   icon: 'pen-to-square',  showKey: 'showMenuAdd',            enableKey: 'enableInputManual' },
                                             { id: 'import',          label: 'Import Masal',   icon: 'file-import',    showKey: 'showMenuImport',         enableKey: 'enableImport' },
@@ -17210,7 +17707,7 @@
                                     // --- Sembunyikan "Riwayat" dari menu utama karena sudah masuk dropdown Kasir ---
                                     if (menu.id === 'history') return null;
                                     // --- Sembunyikan item-item yang sudah masuk dropdown Barang ---
-                                    if (['stock_opname','add','import','transfer_barang','stok_view'].includes(menu.id)) return null;
+                                    if (['stock_opname','add','import','transfer_barang','stok_view','batch_ed'].includes(menu.id)) return null;
                                     // --- Menu biasa - farmacare teal style ---
                                     return (
                                         <div
@@ -17482,6 +17979,7 @@
                         {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='import')?.readOnly} />)}
                         {activeTab === 'stock_opname' && (<StockOpnameView items={inventoryData} user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='stock_opname')?.readOnly} isOwner={isOwner} />)}
                         {activeTab === 'stok_view' && (<StokView items={inventoryData} currentProfile={currentProfile} settings={settingsData} readOnly={menuItems.find(m=>m.id==='stok_view')?.readOnly} isOwner={isOwner} />)}
+                        {activeTab === 'batch_ed' && (<BatchEDView items={inventoryData} currentProfile={currentProfile} settings={settingsData} readOnly={menuItems.find(m=>m.id==='batch_ed')?.readOnly} isOwner={isOwner} user={user} />)}
                         {activeTab === 'rekam_medis' && (<RekamMedisView user={user} showToast={showToast} readOnly={menuItems.find(m=>m.id==='rekam_medis')?.readOnly} />)}
                         {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} authSession={authSession} onUpdateSession={(newSession) => { setAuthSession(newSession); saveSession(newSession); }} inventoryItems={inventoryData} />)}
                         {activeTab === 'pengguna_akun' && (<PenggunaAkunView authSession={authSession} onUpdateSession={(newSession) => { setAuthSession(newSession); saveSession(newSession); }} showToast={showToast} />)}
