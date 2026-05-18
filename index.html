@@ -12735,7 +12735,7 @@
                     .filter(([, v]) => v !== undefined)
                     .map(([itemId, physicalQty]) => {
                         const item = items.find(i => i.id === itemId);
-                        return { itemId, name: item?.name || '?', systemQty: Number(item?.qty || 0), physicalQty: Number(physicalQty), selisih: Number(physicalQty) - Number(item?.qty || 0), price: Number(item?.price || 0) };
+                        return { itemId, name: item?.name || '?', systemQty: Number(item?.qty || 0), physicalQty: Number(physicalQty), selisih: Number(physicalQty) - Number(item?.qty || 0), price: Number(item?.price || 0), costPrice: Number(item?.costPrice || 0) };
                     });
                 try {
                     // entries = untuk history/export, physicalMap diupdate per-item oleh handleCountChange & kasir
@@ -12757,7 +12757,7 @@
                     .filter(([, v]) => v !== undefined)
                     .map(([itemId, physicalQty]) => {
                         const item = items.find(i => i.id === itemId);
-                        return { itemId, name: item?.name || '?', systemQty: Number(item?.qty || 0), physicalQty: Number(physicalQty), selisih: Number(physicalQty) - Number(item?.qty || 0), price: Number(item?.price || 0) };
+                        return { itemId, name: item?.name || '?', systemQty: Number(item?.qty || 0), physicalQty: Number(physicalQty), selisih: Number(physicalQty) - Number(item?.qty || 0), price: Number(item?.price || 0), costPrice: Number(item?.costPrice || 0) };
                     });
                 try {
                     // Update stock opname session to closed
@@ -12811,14 +12811,14 @@
                     const storeName = currentProfile?.name || 'Toko';
 
                     // ── Judul ──
-                    sheet.mergeCells('A1:F1');
+                    sheet.mergeCells('A1:H1');
                     sheet.getCell('A1').value = `LAPORAN STOCK OPNAME - ${storeName.toUpperCase()}`;
                     sheet.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FF0F172A' } };
                     sheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
                     sheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F2FE' } };
                     sheet.getRow(1).height = 30;
 
-                    sheet.mergeCells('A2:F2');
+                    sheet.mergeCells('A2:H2');
                     sheet.getCell('A2').value = `Tanggal Opname: ${tglOpname}   |   Selesai: ${tglSelesai}`;
                     sheet.getCell('A2').font = { italic: true, size: 10, color: { argb: 'FF475569' } };
                     sheet.getCell('A2').alignment = { horizontal: 'center' };
@@ -12827,7 +12827,7 @@
                     sheet.addRow([]);
 
                     // ── Header Kolom ──
-                    const headerRow = sheet.addRow(['No', 'Nama Barang', 'Stok Sistem', 'Stok Fisik', 'Selisih', 'Harga Jual', 'Nilai Selisih']);
+                    const headerRow = sheet.addRow(['No', 'Nama Barang', 'Stok Sistem', 'Stok Fisik', 'Selisih', 'Harga Beli', 'Harga Jual', 'Nilai Selisih']);
                     headerRow.eachCell(cell => {
                         cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
                         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0284C7' } };
@@ -12842,7 +12842,10 @@
                     headerRow.height = 22;
 
                     // ── Data ──
-                    const entries = detail.entries || [];
+                    const entries = (detail.entries || []).map(e => ({
+                        ...e,
+                        costPrice: e.costPrice || items.find(inv => inv.id === e.itemId || inv.name === e.name)?.costPrice || 0
+                    }));
                     entries.forEach((e, idx) => {
                         const nilaiSelisih = (e.price && e.selisih !== 0) ? e.selisih * e.price : 0;
                         const row = sheet.addRow([
@@ -12851,6 +12854,7 @@
                             e.systemQty,
                             e.physicalQty,
                             e.selisih,
+                            e.costPrice || 0,
                             e.price || 0,
                             nilaiSelisih,
                         ]);
@@ -12878,33 +12882,37 @@
                         // Format rupiah
                         row.getCell(6).numFmt = '"Rp"#,##0';
                         row.getCell(7).numFmt = '"Rp"#,##0';
-                        const nilaiCell = row.getCell(7);
+                        row.getCell(8).numFmt = '"Rp"#,##0';
+                        const nilaiCell = row.getCell(8);
                         if (nilaiSelisih < 0) nilaiCell.font = { bold: true, color: { argb: 'FFEF4444' } };
                         else if (nilaiSelisih > 0) nilaiCell.font = { bold: true, color: { argb: 'FF10B981' } };
                     });
 
                     // ── Ringkasan ──
                     sheet.addRow([]);
-                    const totalMinus = entries.filter(e => e.selisih < 0).reduce((s, e) => s + (e.selisih * (e.price || 0)), 0);
-                    const totalPlus = entries.filter(e => e.selisih > 0).reduce((s, e) => s + (e.selisih * (e.price || 0)), 0);
+                    const totalMinusJual = entries.filter(e => e.selisih < 0).reduce((s, e) => s + (e.selisih * (e.price || 0)), 0);
+                    const totalPlusJual  = entries.filter(e => e.selisih > 0).reduce((s, e) => s + (e.selisih * (e.price || 0)), 0);
+                    const totalMinusBeli = entries.filter(e => e.selisih < 0).reduce((s, e) => s + (e.selisih * (e.costPrice || 0)), 0);
+                    const totalPlusBeli  = entries.filter(e => e.selisih > 0).reduce((s, e) => s + (e.selisih * (e.costPrice || 0)), 0);
                     const totalSelisih = entries.filter(e => e.selisih !== 0).length;
                     const totalSesuai = entries.filter(e => e.selisih === 0).length;
 
                     const summaryData = [
-                        ['Total Barang Dicatat', entries.length],
-                        ['Barang Ada Selisih', totalSelisih],
-                        ['Barang Sesuai', totalSesuai],
-                        ['Total Nilai Lebih (+)', totalPlus],
-                        ['Total Nilai Minus (−)', totalMinus],
+                        ['Total Barang Dicatat',           entries.length,  null,        'FF0F172A', false],
+                        ['Barang Ada Selisih',             totalSelisih,    null,        'FF0F172A', false],
+                        ['Barang Sesuai',                  totalSesuai,     null,        'FF0F172A', false],
+                        ['Total Nilai Lebih — Harga Jual (+)', totalPlusJual,  'FF10B981', 'FF10B981', true],
+                        ['Total Nilai Minus — Harga Jual (−)', totalMinusJual, 'FFFEE2E2', 'FFEF4444', true],
+                        ['Total Nilai Lebih — Harga Beli (+)', totalPlusBeli,  'FF10B981', 'FF10B981', true],
+                        ['Total Nilai Minus — Harga Beli (−)', totalMinusBeli, 'FFFEE2E2', 'FFEF4444', true],
                     ];
-                    summaryData.forEach(([label, val], i) => {
-                        const r = sheet.addRow(['', label, '', '', '', '', typeof val === 'number' && i >= 3 ? val : val]);
+                    summaryData.forEach(([label, val, valBg, valColor, isCurrency]) => {
+                        const r = sheet.addRow(['', label, '', '', '', '', '', isCurrency ? val : val]);
                         r.getCell(2).font = { bold: true, size: 10, color: { argb: 'FF334155' } };
-                        r.getCell(7).font = { bold: true, color: { argb: i === 3 ? 'FF10B981' : i === 4 ? 'FFEF4444' : 'FF0F172A' } };
-                        if (i >= 3) r.getCell(7).numFmt = '"Rp"#,##0';
-                        else r.getCell(7).value = val;
+                        r.getCell(8).font = { bold: true, color: { argb: valColor } };
+                        if (isCurrency) r.getCell(8).numFmt = '"Rp"#,##0';
                         r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
-                        r.getCell(7).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+                        r.getCell(8).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: valBg || 'FFF1F5F9' } };
                     });
 
                     // ── Lebar Kolom ──
@@ -12914,7 +12922,8 @@
                         { key: 'sistem', width: 14 },
                         { key: 'fisik', width: 14 },
                         { key: 'selisih', width: 12 },
-                        { key: 'harga', width: 18 },
+                        { key: 'hargaBeli', width: 18 },
+                        { key: 'hargaJual', width: 18 },
                         { key: 'nilai', width: 20 },
                     ];
 
@@ -12967,31 +12976,54 @@
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm">
-                                        <thead className="bg-slate-50"><tr className="text-left text-xs font-bold text-slate-500 uppercase"><th className="px-4 py-3">Nama Barang</th><th className="px-4 py-3 text-center">Stok Sistem</th><th className="px-4 py-3 text-center">Stok Fisik</th><th className="px-4 py-3 text-center">Selisih</th><th className="px-4 py-3 text-center">Harga Jual</th><th className="px-4 py-3 text-center">Nilai Selisih</th></tr></thead>
+                                        <thead className="bg-slate-50"><tr className="text-left text-xs font-bold text-slate-500 uppercase"><th className="px-4 py-3">Nama Barang</th><th className="px-4 py-3 text-center">Stok Sistem</th><th className="px-4 py-3 text-center">Stok Fisik</th><th className="px-4 py-3 text-center">Selisih</th><th className="px-4 py-3 text-center">Harga Beli</th><th className="px-4 py-3 text-center">Harga Jual</th><th className="px-4 py-3 text-center">Nilai Selisih</th></tr></thead>
                                         <tbody className="divide-y divide-slate-50">
-                                            {(historyDetail.entries || []).map((e, i) => (
+                                            {(historyDetail.entries || []).map((e, i) => {
+                                                const invItem = items.find(inv => inv.id === e.itemId || inv.name === e.name);
+                                                const resolvedCostPrice = e.costPrice || invItem?.costPrice || 0;
+                                                return (
                                                 <tr key={i} className="hover:bg-slate-50/50">
                                                     <td className="px-4 py-3 font-medium text-slate-700">{e.name}</td>
                                                     <td className="px-4 py-3 text-center text-slate-500">{e.systemQty}</td>
                                                     <td className="px-4 py-3 text-center font-bold">{e.physicalQty}</td>
                                                     <td className={`px-4 py-3 text-center font-black ${e.selisih > 0 ? 'text-emerald-600' : e.selisih < 0 ? 'text-red-500' : 'text-slate-400'}`}>{e.selisih > 0 ? '+' : ''}{e.selisih}</td>
+                                                    <td className="px-4 py-3 text-center text-slate-500 text-xs">{resolvedCostPrice ? formatRupiah(resolvedCostPrice) : '-'}</td>
                                                     <td className="px-4 py-3 text-center text-slate-500 text-xs">{e.price ? formatRupiah(e.price) : '-'}</td>
                                                     <td className={`px-4 py-3 text-center font-black text-xs ${e.selisih < 0 ? 'text-red-500' : e.selisih > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
                                                         {e.price && e.selisih !== 0 ? `${e.selisih > 0 ? '+' : ''}${formatRupiah(e.selisih * e.price)}` : '-'}
                                                     </td>
                                                 </tr>
-                                            ))}
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                     {(!historyDetail.entries || historyDetail.entries.length === 0) && <p className="text-center text-slate-400 py-8 text-sm">Tidak ada data</p>}
                                 </div>
                                 {historyDetail.entries && historyDetail.entries.length > 0 && (() => {
-                                    const totalMinus = historyDetail.entries.filter(e => e.selisih < 0).reduce((sum, e) => sum + (e.selisih * (e.price || 0)), 0);
-                                    const totalPlus = historyDetail.entries.filter(e => e.selisih > 0).reduce((sum, e) => sum + (e.selisih * (e.price || 0)), 0);
+                                    const resolvedEntries = historyDetail.entries.map(e => ({
+                                        ...e,
+                                        costPrice: e.costPrice || items.find(inv => inv.id === e.itemId || inv.name === e.name)?.costPrice || 0
+                                    }));
+                                    const totalMinusJual = resolvedEntries.filter(e => e.selisih < 0).reduce((sum, e) => sum + (e.selisih * (e.price || 0)), 0);
+                                    const totalPlusJual  = resolvedEntries.filter(e => e.selisih > 0).reduce((sum, e) => sum + (e.selisih * (e.price || 0)), 0);
+                                    const totalMinusBeli = resolvedEntries.filter(e => e.selisih < 0).reduce((sum, e) => sum + (e.selisih * (e.costPrice || 0)), 0);
+                                    const totalPlusBeli  = resolvedEntries.filter(e => e.selisih > 0).reduce((sum, e) => sum + (e.selisih * (e.costPrice || 0)), 0);
                                     return (
-                                        <div className="p-4 border-t border-slate-100 bg-slate-50 flex flex-wrap gap-4 justify-end">
-                                            {totalPlus > 0 && <div className="text-right"><p className="text-xs text-slate-400 font-medium">Total Nilai Lebih (+)</p><p className="text-base font-black text-emerald-600">+{formatRupiah(totalPlus)}</p></div>}
-                                            {totalMinus < 0 && <div className="text-right"><p className="text-xs text-slate-400 font-medium">Total Nilai Minus (−)</p><p className="text-base font-black text-red-500">{formatRupiah(totalMinus)}</p></div>}
+                                        <div className="p-4 border-t border-slate-100 bg-slate-50 space-y-3">
+                                            {/* Harga Jual */}
+                                            <div className="flex flex-wrap gap-4 justify-end items-center">
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-auto">Harga Jual</p>
+                                                {totalPlusJual > 0 && <div className="text-right"><p className="text-xs text-slate-400 font-medium">Total Nilai Lebih (+)</p><p className="text-base font-black text-emerald-600">+{formatRupiah(totalPlusJual)}</p></div>}
+                                                {totalMinusJual < 0 && <div className="text-right"><p className="text-xs text-slate-400 font-medium">Total Nilai Minus (−)</p><p className="text-base font-black text-red-500">{formatRupiah(totalMinusJual)}</p></div>}
+                                                {totalPlusJual === 0 && totalMinusJual === 0 && <p className="text-xs text-slate-400">Tidak ada selisih</p>}
+                                            </div>
+                                            {/* Harga Beli */}
+                                            <div className="flex flex-wrap gap-4 justify-end items-center border-t border-slate-200 pt-3">
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-auto">Harga Beli</p>
+                                                {totalPlusBeli > 0 && <div className="text-right"><p className="text-xs text-slate-400 font-medium">Total Nilai Lebih (+)</p><p className="text-base font-black text-emerald-600">+{formatRupiah(totalPlusBeli)}</p></div>}
+                                                {totalMinusBeli < 0 && <div className="text-right"><p className="text-xs text-slate-400 font-medium">Total Nilai Minus (−)</p><p className="text-base font-black text-red-500">{formatRupiah(totalMinusBeli)}</p></div>}
+                                                {totalPlusBeli === 0 && totalMinusBeli === 0 && <p className="text-xs text-slate-400">Tidak ada selisih</p>}
+                                            </div>
                                         </div>
                                     );
                                 })()}
