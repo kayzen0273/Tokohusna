@@ -3822,6 +3822,7 @@
             const [itemDiscountBeli, setItemDiscountBeli] = useState('');
             const [itemDiscountBeliType, setItemDiscountBeliType] = useState('%');
             const [itemBatchNo, setItemBatchNo] = useState('');
+            const [itemExp, setItemExp] = useState('');
             const [editingItemIndex, setEditingItemIndex] = useState(null); // index item yang sedang diedit
             const [originalItemsSnapshot, setOriginalItemsSnapshot] = useState({}); // qty asli sebelum diedit { itemId: qty }
             // State untuk tambah barang baru via faktur (belum disimpan ke Firestore)
@@ -3886,6 +3887,7 @@
                             discountBeli: itemDiscountBeli ? parseFloat(itemDiscountBeli) : 0,
                             discountBeliType: itemDiscountBeliType,
                             batchNo: itemBatchNo.trim(),
+                            exp: itemExp.trim(),
                         };
                         return { ...prev, items: updatedItems };
                     });
@@ -3898,6 +3900,7 @@
                     setItemDiscountBeli('');
                     setItemDiscountBeliType('%');
                     setItemBatchNo('');
+                    setItemExp('');
                     showToast("✅ Barang diperbarui");
                     return;
                 }
@@ -3917,6 +3920,7 @@
                     discountBeli: itemDiscountBeli ? parseFloat(itemDiscountBeli) : 0,
                     discountBeliType: itemDiscountBeliType,
                     batchNo: itemBatchNo.trim(),
+                    exp: itemExp.trim(),
                     currentStock: selectedItem.qty || 0
                 };
                 
@@ -3936,6 +3940,7 @@
                 setItemDiscountBeli('');
                 setItemDiscountBeliType('%');
                 setItemBatchNo('');
+                setItemExp('');
                 showToast("Barang ditambahkan");
             };
 
@@ -3951,6 +3956,7 @@
                 setItemDiscountBeli(item.discountBeli ? item.discountBeli.toString() : '');
                 setItemDiscountBeliType(item.discountBeliType || '%');
                 setItemBatchNo(item.batchNo || '');
+                setItemExp(item.exp || '');
             };
 
             // Fungsi untuk batal edit item
@@ -3964,6 +3970,7 @@
                 setItemDiscountBeli('');
                 setItemDiscountBeliType('%');
                 setItemBatchNo('');
+                setItemExp('');
             };
 
             // Tambah barang BARU ke daftar faktur — hanya di memori, belum ke Firestore.
@@ -4001,6 +4008,7 @@
                         discountBeli: itemDiscountBeli ? parseFloat(itemDiscountBeli) : 0,
                         discountBeliType: itemDiscountBeliType,
                         batchNo: itemBatchNo.trim(),
+                        exp: itemExp.trim(),
                         currentStock: 0,
                         _pendingNew: true,           // flag: belum ada di Firestore
                         _newItemMeta: {              // data untuk createDoc saat simpan faktur
@@ -4023,6 +4031,7 @@
                 setItemDiscountBeli('');
                 setItemDiscountBeliType('%');
                 setItemBatchNo('');
+                setItemExp('');
                 showToast(`"${newItemData.name.trim()}" ditambahkan — akan dibuat saat faktur disimpan`);
             };
             
@@ -4213,7 +4222,7 @@
                         dueDate: invoiceData.dueDate ? new Date(invoiceData.dueDate).toISOString() : null, 
                         isPaid: invoiceData.isPaid, 
                         isConsignment: invoiceData.isConsignment || false,
-                        items: finalItems.map(item => ({ id: item.id, name: item.name, qty: item.qty, price: item.price, buyPrice: item.buyPrice || 0, discountBeli: item.discountBeli || 0, discountBeliType: item.discountBeliType || '%', batchNo: item.batchNo || '' })),
+                        items: finalItems.map(item => ({ id: item.id, name: item.name, qty: item.qty, price: item.price, buyPrice: item.buyPrice || 0, discountBeli: item.discountBeli || 0, discountBeliType: item.discountBeliType || '%', batchNo: item.batchNo || '', exp: item.exp || '' })),
                         updatedAt: window.serverTimestamp(),
                         ...(attachmentData ? { attachmentData, attachmentType, attachmentName } : {}),
                         ...(editingPurchaseId ? {} : {
@@ -4310,6 +4319,17 @@
                             if (item.buyPrice && item.buyPrice > 0 && item.buyPrice !== itemData.costPrice) {
                                 updateData.costPrice = item.buyPrice;
                                 console.log(`🏷️ ${item.name}: harga beli diupdate ${itemData.costPrice} → ${item.buyPrice}`);
+                            }
+
+                            // 🔄 Sinkron exp: update inventory hanya jika exp faktur lebih lama (lebih cepat kadaluarsa)
+                            // Prinsip FIFO — yang ditampilkan adalah batch paling cepat kadaluarsa, bukan terbaru
+                            if (item.exp && item.exp.trim() !== '') {
+                                const newExp = new Date(item.exp.trim());
+                                const oldExp = itemData.exp ? new Date(itemData.exp) : null;
+                                if (!oldExp || newExp < oldExp) {
+                                    updateData.exp = item.exp.trim();
+                                    console.log(`📅 ${item.name}: exp diupdate ke batch lebih awal ${item.exp}`);
+                                }
                             }
 
                             // Jika faktur konsinyasi, tandai barang sebagai konsinyasi
@@ -5128,6 +5148,11 @@
                                                 <label className="block text-[10px] text-indigo-500 font-semibold mb-1">🔢 No. Batch</label>
                                                 <input type="text" className="w-full h-8 px-2 border border-indigo-200 rounded text-xs bg-white outline-none focus:border-indigo-400" placeholder="Contoh: BTH-2025-001 (opsional)" value={itemBatchNo} onChange={e => setItemBatchNo(e.target.value)} />
                                             </div>
+                                            {/* Kadaluarsa per barang */}
+                                            <div className="mb-3">
+                                                <label className="block text-[10px] text-rose-500 font-semibold mb-1">📅 Kadaluarsa</label>
+                                                <input type="date" className="w-full h-8 px-2 border border-rose-200 rounded text-xs bg-white outline-none focus:border-rose-400" value={itemExp} onChange={e => setItemExp(e.target.value)} />
+                                            </div>
                                             <div className="flex gap-2">
                                                 {editingItemIndex !== null && (
                                                     <button type="button" onClick={cancelEditItem} className="flex-1 py-1.5 bg-white border border-gray-300 text-gray-600 rounded text-xs font-bold hover:bg-gray-50 active:scale-95 transition-all">
@@ -5174,6 +5199,7 @@
                                                                 <span className="text-[11px] text-slate-500">Jual: {formatRupiah(item.price)}</span>
                                                                 <span className="text-[11px] text-teal-600 font-bold">= {formatRupiah(item.qty * (item.discountBeli > 0 ? (item.discountBeliType === 'Rp' ? Math.max(0, item.buyPrice - item.discountBeli) : item.buyPrice * (1 - item.discountBeli/100)) : (item.buyPrice || 0)))}</span>
                                                                 {item.batchNo && <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">Batch: {item.batchNo}</span>}
+                                                                {item.exp && <span className="text-[10px] text-rose-600 font-bold bg-rose-50 px-1.5 py-0.5 rounded">ED: {item.exp}</span>}
                                                             </div>
                                                         </div>
                                                         <button type="button" onClick={() => { if(editingItemIndex === index) cancelEditItem(); removeItemFromInvoice(index); }} className="ml-3 text-red-400 hover:text-red-600 p-1 flex-shrink-0"><Icon name="trash" /></button>
@@ -5344,6 +5370,11 @@
                                                             {item.batchNo && (
                                                                 <p className="text-[10px] text-indigo-600 font-bold mt-0.5 flex items-center gap-1">
                                                                     <span className="bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded font-mono">🔢 Batch: {item.batchNo}</span>
+                                                                </p>
+                                                            )}
+                                                            {item.exp && (
+                                                                <p className="text-[10px] text-rose-600 font-bold mt-0.5 flex items-center gap-1">
+                                                                    <span className="bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded">📅 ED: {item.exp}</span>
                                                                 </p>
                                                             )}
                                                         </div>
@@ -10541,7 +10572,7 @@
         };
         // ====== END HALAMAN RIWAYAT PERUBAHAN HARGA ======
 
-        const ProductDetailPage = ({ item, onBack, onEdit, onDelete, settings, readOnly, isOwner, lowStockThreshold, currentProfile, onNavigateToPurchases, onNavigateToHistory, initialTab }) => {
+        const ProductDetailPage = ({ item, onBack, onEdit, onDelete, settings, readOnly, isOwner, lowStockThreshold, currentProfile, onNavigateToPurchases, onNavigateToHistory, initialTab, showToast }) => {
             const threshold = item.minStock ? safeNumber(item.minStock) : lowStockThreshold;
             const isLow = safeNumber(item.qty) < threshold;
             const daysLeft = getDaysRemaining(item.exp);
@@ -10556,6 +10587,38 @@
             const [showPriceHistory, setShowPriceHistory] = useState(false);
             const [stockViewMode, setStockViewMode] = useState('kegiatan'); // 'kegiatan' | 'batch'
             const [sortAsc, setSortAsc] = useState(false); // false = terbaru dulu
+            const [depletedBatches, setDepletedBatches] = useState(item.depletedBatches || []);
+            const [markingBatch, setMarkingBatch] = useState(null); // batchNo yang sedang diproses
+
+            const markBatchToggle = async (batchNo) => {
+                setMarkingBatch(batchNo);
+                try {
+                    const isDepleted = depletedBatches.includes(batchNo);
+                    const newDepleted = isDepleted
+                        ? depletedBatches.filter(b => b !== batchNo)
+                        : [...depletedBatches, batchNo];
+
+                    // Cari exp paling awal dari batch yang masih aktif (belum habis)
+                    const activeBatches = batches.filter(b => !newDepleted.includes(b.batchNo) && b.exp);
+                    let newExp = null;
+                    if (activeBatches.length > 0) {
+                        activeBatches.sort((a, b) => new Date(a.exp) - new Date(b.exp));
+                        newExp = activeBatches[0].exp;
+                    }
+
+                    const itemRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
+                    const updateData = { depletedBatches: newDepleted, updatedAt: window.serverTimestamp() };
+                    if (newExp !== null) updateData.exp = newExp;
+                    else if (newDepleted.length > 0 && activeBatches.length === 0) updateData.exp = null; // semua habis
+
+                    await window.updateDoc(itemRef, updateData);
+                    setDepletedBatches(newDepleted);
+                    showToast && showToast(isDepleted ? '✅ Batch diaktifkan kembali' : '📦 Batch ditandai habis, ED diperbarui');
+                } catch (e) {
+                    showToast && showToast('Gagal memperbarui batch', 'error');
+                }
+                setMarkingBatch(null);
+            };
 
             // Parse units
             const units = React.useMemo(() => {
@@ -10588,9 +10651,22 @@
                     const map = {};
                     result.forEach(r => {
                         if (!map[r.batchNo]) map[r.batchNo] = { ...r, totalQty: safeNumber(r.qty) };
-                        else map[r.batchNo].totalQty += safeNumber(r.qty);
+                        else {
+                            map[r.batchNo].totalQty += safeNumber(r.qty);
+                            // Simpan exp paling awal untuk batch yang sama
+                            if (r.exp && (!map[r.batchNo].exp || new Date(r.exp) < new Date(map[r.batchNo].exp))) {
+                                map[r.batchNo].exp = r.exp;
+                            }
+                        }
                     });
-                    setBatches(Object.values(map).sort((a,b) => (b.date||'').localeCompare(a.date||'')));
+                    // Urutkan: exp paling cepat kadaluarsa dulu; jika tidak ada exp, urutkan by date terlama
+                    setBatches(Object.values(map).sort((a, b) => {
+                        const hasExpA = a.exp ? 1 : 0;
+                        const hasExpB = b.exp ? 1 : 0;
+                        if (hasExpA !== hasExpB) return hasExpB - hasExpA; // yang ada exp duluan
+                        if (a.exp && b.exp) return new Date(a.exp) - new Date(b.exp); // exp lebih awal duluan
+                        return (a.date || '').localeCompare(b.date || ''); // kalau sama-sama tak ada exp, terlama dulu
+                    }));
                     setLoadingBatch(false);
                 }).catch(() => setLoadingBatch(false));
             }, [activeTab, item.name]);
@@ -10865,21 +10941,62 @@
                                         <div className="grid grid-cols-3 pb-2 gap-2">
                                             <p className="text-[10px] font-bold text-slate-500 uppercase">No. Batch</p>
                                             <p className="text-[10px] font-bold text-slate-500 uppercase">Qty masuk</p>
-                                            <p className="text-[10px] font-bold text-slate-500 uppercase">Tanggal</p>
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase">Tgl / ED ↑ Terlama</p>
                                         </div>
-                                        {batches.map((b, idx) => (
-                                            <div key={idx} className="grid grid-cols-3 py-3 gap-2 items-start">
-                                                <div>
-                                                    <p className="text-sm font-bold text-teal-700">{b.batchNo}</p>
-                                                    {b.supplier && b.supplier !== '-' && <p className="text-[10px] text-slate-400">{b.supplier}</p>}
-                                                </div>
-                                                <p className="text-sm font-semibold text-slate-800">{b.totalQty} {item.unit || 'Pcs'}</p>
-                                                <div>
-                                                    <p className="text-sm text-slate-600">{b.date ? formatDateIndo(b.date) : '-'}</p>
-                                                    {b.exp && <p className={`text-[10px] ${getDaysRemaining(b.exp) !== null && getDaysRemaining(b.exp) < 0 ? 'text-red-500' : getDaysRemaining(b.exp) !== null && getDaysRemaining(b.exp) < 90 ? 'text-amber-500' : 'text-slate-400'}`}>Exp: {formatDateIndo(b.exp)}</p>}
+                                        {/* Batch summary chips */}
+                                        {depletedBatches.length > 0 && (
+                                            <div className="py-2 flex gap-2 flex-wrap">
+                                                <span className="text-[10px] bg-teal-50 text-teal-600 font-bold px-2 py-1 rounded-full border border-teal-100">
+                                                    ✅ Aktif: {batches.filter(b => !depletedBatches.includes(b.batchNo)).length} batch
+                                                </span>
+                                                <span className="text-[10px] bg-slate-100 text-slate-400 font-bold px-2 py-1 rounded-full">
+                                                    📦 Habis: {depletedBatches.length} batch
+                                                </span>
+                                            </div>
+                                        )}
+                                        {batches.map((b, idx) => {
+                                            const isDepleted = depletedBatches.includes(b.batchNo);
+                                            const expDays = getDaysRemaining(b.exp);
+                                            const expExpired = expDays !== null && expDays < 0;
+                                            const expNear = expDays !== null && expDays < 90 && !expExpired;
+                                            return (
+                                            <div key={idx} className={`py-3 gap-2 items-start border-b border-slate-100 last:border-0 ${isDepleted ? 'opacity-40' : ''}`}>
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                            <p className="text-sm font-bold text-teal-700">{b.batchNo || '—'}</p>
+                                                            {isDepleted && <span className="text-[9px] font-bold bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-full">HABIS</span>}
+                                                        </div>
+                                                        {b.supplier && b.supplier !== '-' && <p className="text-[10px] text-slate-400">{b.supplier}</p>}
+                                                        <div className="flex items-center gap-3 mt-1 flex-wrap">
+                                                            <p className="text-sm font-semibold text-slate-800">{b.totalQty} {item.unit || 'Pcs'}</p>
+                                                            <p className="text-xs text-slate-500">{b.date ? formatDateIndo(b.date) : '-'}</p>
+                                                            {b.exp && (
+                                                                <p className={`text-[10px] font-semibold ${expExpired ? 'text-red-500' : expNear ? 'text-amber-500' : 'text-slate-400'}`}>
+                                                                    ED: {formatDateIndo(b.exp)}
+                                                                    {expExpired && ' ⚠️'}
+                                                                    {expNear && !expExpired && ` (${expDays}h)`}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    {!readOnly && (
+                                                        <button
+                                                            onClick={() => markBatchToggle(b.batchNo)}
+                                                            disabled={markingBatch === b.batchNo}
+                                                            className={`flex-shrink-0 text-[10px] font-bold px-2.5 py-1.5 rounded-lg border transition-all ${
+                                                                isDepleted
+                                                                    ? 'bg-teal-50 border-teal-200 text-teal-600 hover:bg-teal-100'
+                                                                    : 'bg-rose-50 border-rose-200 text-rose-500 hover:bg-rose-100'
+                                                            } ${markingBatch === b.batchNo ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                                        >
+                                                            {markingBatch === b.batchNo ? '...' : isDepleted ? '↩ Aktifkan' : '📦 Tandai Habis'}
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -11401,6 +11518,7 @@
                         onNavigateToPurchases={onNavigateToPurchases}
                         onNavigateToHistory={onNavigateToHistory}
                         initialTab={detailInitialTab}
+                        showToast={onCopySuccess}
                     />
                 );
             }
