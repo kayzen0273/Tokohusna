@@ -3821,6 +3821,10 @@
             const [itemBuyPrice, setItemBuyPrice] = useState('');
             const [itemDiscountBeli, setItemDiscountBeli] = useState('');
             const [itemDiscountBeliType, setItemDiscountBeliType] = useState('%');
+            const [itemDiscountBeli2, setItemDiscountBeli2] = useState('');
+            const [itemDiscountBeliType2, setItemDiscountBeliType2] = useState('%');
+            const [itemDiscountBeli3, setItemDiscountBeli3] = useState('');
+            const [itemDiscountBeliType3, setItemDiscountBeliType3] = useState('%');
             const [itemBatchNo, setItemBatchNo] = useState('');
             const [itemExp, setItemExp] = useState('');
             const [editingItemIndex, setEditingItemIndex] = useState(null); // index item yang sedang diedit
@@ -3846,15 +3850,20 @@
 
             useEffect(() => { if (invoiceData.paymentMethod === 'Kredit') { setInvoiceData(prev => ({ ...prev, isPaid: false })); } else { setInvoiceData(prev => ({ ...prev, isPaid: true })); } }, [invoiceData.paymentMethod]);
 
+            // Helper: hitung harga efektif setelah disc1, disc2, disc3
+            const calcEffBuyPrice = (bp, item) => {
+                let p = bp;
+                if (item.discountBeli > 0) p = item.discountBeliType === 'Rp' ? Math.max(0, p - item.discountBeli) : p * (1 - item.discountBeli / 100);
+                if (item.discountBeli2 > 0) p = item.discountBeliType2 === 'Rp' ? Math.max(0, p - item.discountBeli2) : p * (1 - item.discountBeli2 / 100);
+                if (item.discountBeli3 > 0) p = item.discountBeliType3 === 'Rp' ? Math.max(0, p - item.discountBeli3) : p * (1 - item.discountBeli3 / 100);
+                return p;
+            };
+
             // Auto calculate total dari items
             useEffect(() => {
                 const subtotal = invoiceData.items.reduce((sum, item) => {
                     const bp = item.buyPrice || 0;
-                    let effPrice = bp;
-                    if (item.discountBeli && item.discountBeli > 0) {
-                        if (item.discountBeliType === 'Rp') { effPrice = Math.max(0, bp - item.discountBeli); }
-                        else { effPrice = bp * (1 - item.discountBeli / 100); }
-                    }
+                    const effPrice = calcEffBuyPrice(bp, item);
                     return sum + (item.qty * effPrice);
                 }, 0);
                 setInvoiceData(prev => ({ ...prev, total: subtotal.toString() }));
@@ -3886,6 +3895,10 @@
                             buyPrice: itemBuyPrice ? parseFloat(itemBuyPrice) : 0,
                             discountBeli: itemDiscountBeli ? parseFloat(itemDiscountBeli) : 0,
                             discountBeliType: itemDiscountBeliType,
+                            discountBeli2: itemDiscountBeli2 ? parseFloat(itemDiscountBeli2) : 0,
+                            discountBeliType2: itemDiscountBeliType2,
+                            discountBeli3: itemDiscountBeli3 ? parseFloat(itemDiscountBeli3) : 0,
+                            discountBeliType3: itemDiscountBeliType3,
                             batchNo: itemBatchNo.trim(),
                             exp: itemExp.trim(),
                         };
@@ -3899,6 +3912,10 @@
                     setItemBuyPrice('');
                     setItemDiscountBeli('');
                     setItemDiscountBeliType('%');
+                    setItemDiscountBeli2('');
+                    setItemDiscountBeliType2('%');
+                    setItemDiscountBeli3('');
+                    setItemDiscountBeliType3('%');
                     setItemBatchNo('');
                     setItemExp('');
                     showToast("✅ Barang diperbarui");
@@ -3919,6 +3936,10 @@
                     buyPrice: itemBuyPrice ? parseFloat(itemBuyPrice) : 0,
                     discountBeli: itemDiscountBeli ? parseFloat(itemDiscountBeli) : 0,
                     discountBeliType: itemDiscountBeliType,
+                    discountBeli2: itemDiscountBeli2 ? parseFloat(itemDiscountBeli2) : 0,
+                    discountBeliType2: itemDiscountBeliType2,
+                    discountBeli3: itemDiscountBeli3 ? parseFloat(itemDiscountBeli3) : 0,
+                    discountBeliType3: itemDiscountBeliType3,
                     batchNo: itemBatchNo.trim(),
                     exp: itemExp.trim(),
                     currentStock: selectedItem.qty || 0
@@ -3939,6 +3960,10 @@
                 setItemBuyPrice('');
                 setItemDiscountBeli('');
                 setItemDiscountBeliType('%');
+                    setItemDiscountBeli2('');
+                    setItemDiscountBeliType2('%');
+                    setItemDiscountBeli3('');
+                    setItemDiscountBeliType3('%');
                 setItemBatchNo('');
                 setItemExp('');
                 showToast("Barang ditambahkan");
@@ -3955,6 +3980,10 @@
                 setItemBuyPrice(item.buyPrice ? item.buyPrice.toString() : '');
                 setItemDiscountBeli(item.discountBeli ? item.discountBeli.toString() : '');
                 setItemDiscountBeliType(item.discountBeliType || '%');
+                setItemDiscountBeli2(item.discountBeli2 ? item.discountBeli2.toString() : '');
+                setItemDiscountBeliType2(item.discountBeliType2 || '%');
+                setItemDiscountBeli3(item.discountBeli3 ? item.discountBeli3.toString() : '');
+                setItemDiscountBeliType3(item.discountBeliType3 || '%');
                 setItemBatchNo(item.batchNo || '');
                 setItemExp(item.exp || '');
             };
@@ -3969,6 +3998,10 @@
                 setItemBuyPrice('');
                 setItemDiscountBeli('');
                 setItemDiscountBeliType('%');
+                    setItemDiscountBeli2('');
+                    setItemDiscountBeliType2('%');
+                    setItemDiscountBeli3('');
+                    setItemDiscountBeliType3('%');
                 setItemBatchNo('');
                 setItemExp('');
             };
@@ -4007,6 +4040,10 @@
                         buyPrice: itemBuyPrice ? parseFloat(itemBuyPrice) : 0,
                         discountBeli: itemDiscountBeli ? parseFloat(itemDiscountBeli) : 0,
                         discountBeliType: itemDiscountBeliType,
+                        discountBeli2: itemDiscountBeli2 ? parseFloat(itemDiscountBeli2) : 0,
+                        discountBeliType2: itemDiscountBeliType2,
+                        discountBeli3: itemDiscountBeli3 ? parseFloat(itemDiscountBeli3) : 0,
+                        discountBeliType3: itemDiscountBeliType3,
                         batchNo: itemBatchNo.trim(),
                         exp: itemExp.trim(),
                         currentStock: 0,
@@ -4030,6 +4067,10 @@
                 setItemBuyPrice('');
                 setItemDiscountBeli('');
                 setItemDiscountBeliType('%');
+                    setItemDiscountBeli2('');
+                    setItemDiscountBeliType2('%');
+                    setItemDiscountBeli3('');
+                    setItemDiscountBeliType3('%');
                 setItemBatchNo('');
                 setItemExp('');
                 showToast(`"${newItemData.name.trim()}" ditambahkan — akan dibuat saat faktur disimpan`);
@@ -4222,7 +4263,7 @@
                         dueDate: invoiceData.dueDate ? new Date(invoiceData.dueDate).toISOString() : null, 
                         isPaid: invoiceData.isPaid, 
                         isConsignment: invoiceData.isConsignment || false,
-                        items: finalItems.map(item => ({ id: item.id, name: item.name, qty: item.qty, price: item.price, buyPrice: item.buyPrice || 0, discountBeli: item.discountBeli || 0, discountBeliType: item.discountBeliType || '%', batchNo: item.batchNo || '', exp: item.exp || '' })),
+                        items: finalItems.map(item => ({ id: item.id, name: item.name, qty: item.qty, price: item.price, buyPrice: item.buyPrice || 0, discountBeli: item.discountBeli || 0, discountBeliType: item.discountBeliType || '%', discountBeli2: item.discountBeli2 || 0, discountBeliType2: item.discountBeliType2 || '%', discountBeli3: item.discountBeli3 || 0, discountBeliType3: item.discountBeliType3 || '%', batchNo: item.batchNo || '', exp: item.exp || '' })),
                         updatedAt: window.serverTimestamp(),
                         ...(attachmentData ? { attachmentData, attachmentType, attachmentName } : {}),
                         ...(editingPurchaseId ? {} : {
@@ -5053,29 +5094,41 @@
                                                 </div>
                                             </div>
                                             {/* Diskon Harga Beli untuk barang baru */}
-                                            <div className="flex gap-2 mb-2 items-end">
-                                                <div className="flex-1">
-                                                    <label className="block text-[10px] text-orange-500 font-semibold mb-1">🏷️ Diskon Harga Beli</label>
-                                                    <div className="flex gap-1">
-                                                        <select value={itemDiscountBeliType} onChange={e => setItemDiscountBeliType(e.target.value)} className="h-8 px-1 border border-orange-200 rounded text-xs bg-white outline-none" style={{width:'46px'}}>
-                                                            <option value="%">%</option>
-                                                            <option value="Rp">Rp</option>
+                                            <div className="mb-2">
+                                                <label className="block text-[10px] text-orange-500 font-semibold mb-1">🏷️ Diskon Harga Beli <span className="text-slate-300 font-normal">(opsional)</span></label>
+                                                <div className="flex flex-col gap-1">
+                                                    {/* Disc 1 */}
+                                                    <div className="flex gap-1 items-center">
+                                                        <span className="text-[10px] text-slate-400 w-8">D1</span>
+                                                        <select value={itemDiscountBeliType} onChange={e => setItemDiscountBeliType(e.target.value)} className="h-7 px-1 border border-orange-200 rounded text-xs bg-white outline-none" style={{width:'42px'}}>
+                                                            <option value="%">%</option><option value="Rp">Rp</option>
                                                         </select>
-                                                        <input type="number" className="flex-1 h-8 px-2 border border-orange-200 rounded text-xs bg-white outline-none focus:border-orange-400" placeholder="0" value={itemDiscountBeli} onChange={e => setItemDiscountBeli(e.target.value)} min="0" />
+                                                        <input type="number" className="flex-1 h-7 px-2 border border-orange-200 rounded text-xs bg-white outline-none focus:border-orange-400" placeholder="0" value={itemDiscountBeli} onChange={e => setItemDiscountBeli(e.target.value)} min="0" />
+                                                    </div>
+                                                    {/* Disc 2 */}
+                                                    <div className="flex gap-1 items-center">
+                                                        <span className="text-[10px] text-slate-400 w-8">D2</span>
+                                                        <select value={itemDiscountBeliType2} onChange={e => setItemDiscountBeliType2(e.target.value)} className="h-7 px-1 border border-orange-100 rounded text-xs bg-white outline-none" style={{width:'42px'}}>
+                                                            <option value="%">%</option><option value="Rp">Rp</option>
+                                                        </select>
+                                                        <input type="number" className="flex-1 h-7 px-2 border border-orange-100 rounded text-xs bg-white outline-none focus:border-orange-300" placeholder="0 (opsional)" value={itemDiscountBeli2} onChange={e => setItemDiscountBeli2(e.target.value)} min="0" />
+                                                    </div>
+                                                    {/* Disc 3 */}
+                                                    <div className="flex gap-1 items-center">
+                                                        <span className="text-[10px] text-slate-400 w-8">D3</span>
+                                                        <select value={itemDiscountBeliType3} onChange={e => setItemDiscountBeliType3(e.target.value)} className="h-7 px-1 border border-orange-100 rounded text-xs bg-white outline-none" style={{width:'42px'}}>
+                                                            <option value="%">%</option><option value="Rp">Rp</option>
+                                                        </select>
+                                                        <input type="number" className="flex-1 h-7 px-2 border border-orange-100 rounded text-xs bg-white outline-none focus:border-orange-300" placeholder="0 (opsional)" value={itemDiscountBeli3} onChange={e => setItemDiscountBeli3(e.target.value)} min="0" />
                                                     </div>
                                                 </div>
-                                                {itemBuyPrice && itemDiscountBeli && parseFloat(itemDiscountBeli) > 0 && (
-                                                    <div className="text-right pb-1">
-                                                        <span className="text-[10px] text-slate-400">Harga efektif:</span>
-                                                        <p className="text-xs font-bold text-teal-700">
-                                                            {formatRupiah(
-                                                                itemDiscountBeliType === 'Rp'
-                                                                    ? Math.max(0, parseFloat(itemBuyPrice||0) - parseFloat(itemDiscountBeli||0))
-                                                                    : parseFloat(itemBuyPrice||0) * (1 - parseFloat(itemDiscountBeli||0)/100)
-                                                            )}
-                                                        </p>
-                                                    </div>
-                                                )}
+                                                {itemBuyPrice && (parseFloat(itemDiscountBeli||0) > 0 || parseFloat(itemDiscountBeli2||0) > 0 || parseFloat(itemDiscountBeli3||0) > 0) && (() => {
+                                                    let p = parseFloat(itemBuyPrice||0);
+                                                    if (parseFloat(itemDiscountBeli||0) > 0) p = itemDiscountBeliType === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli)) : p * (1 - parseFloat(itemDiscountBeli)/100);
+                                                    if (parseFloat(itemDiscountBeli2||0) > 0) p = itemDiscountBeliType2 === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli2)) : p * (1 - parseFloat(itemDiscountBeli2)/100);
+                                                    if (parseFloat(itemDiscountBeli3||0) > 0) p = itemDiscountBeliType3 === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli3)) : p * (1 - parseFloat(itemDiscountBeli3)/100);
+                                                    return <p className="text-[10px] text-teal-700 font-bold mt-1 text-right">Efektif: {formatRupiah(p)}</p>;
+                                                })()}
                                             </div>
                                             <div className="mb-3">
                                                 <label className="block text-[10px] text-gray-500 mb-1">Kadaluarsa <span className="text-slate-300">(opsional)</span></label>
@@ -5119,29 +5172,38 @@
                                                 </div>
                                             </div>
                                             {/* Diskon per barang */}
-                                            <div className="flex gap-2 mb-2 items-end">
-                                                <div className="flex-1">
-                                                    <label className="block text-[10px] text-orange-500 font-semibold mb-1">🏷️ Diskon Harga Beli</label>
-                                                    <div className="flex gap-1">
-                                                        <select value={itemDiscountBeliType} onChange={e => setItemDiscountBeliType(e.target.value)} className="h-8 px-1 border border-orange-200 rounded text-xs bg-white outline-none focus:border-orange-400" style={{width:'46px'}}>
-                                                            <option value="%">%</option>
-                                                            <option value="Rp">Rp</option>
+                                            <div className="mb-2">
+                                                <label className="block text-[10px] text-orange-500 font-semibold mb-1">🏷️ Diskon Harga Beli <span className="text-slate-300 font-normal">(opsional)</span></label>
+                                                <div className="flex flex-col gap-1">
+                                                    <div className="flex gap-1 items-center">
+                                                        <span className="text-[10px] text-slate-400 w-8">D1</span>
+                                                        <select value={itemDiscountBeliType} onChange={e => setItemDiscountBeliType(e.target.value)} className="h-7 px-1 border border-orange-200 rounded text-xs bg-white outline-none focus:border-orange-400" style={{width:'42px'}}>
+                                                            <option value="%">%</option><option value="Rp">Rp</option>
                                                         </select>
-                                                        <input type="number" className="flex-1 h-8 px-2 border border-orange-200 rounded text-xs bg-white outline-none focus:border-orange-400" placeholder="0" value={itemDiscountBeli} onChange={e => setItemDiscountBeli(e.target.value)} min="0" />
+                                                        <input type="number" className="flex-1 h-7 px-2 border border-orange-200 rounded text-xs bg-white outline-none focus:border-orange-400" placeholder="0" value={itemDiscountBeli} onChange={e => setItemDiscountBeli(e.target.value)} min="0" />
+                                                    </div>
+                                                    <div className="flex gap-1 items-center">
+                                                        <span className="text-[10px] text-slate-400 w-8">D2</span>
+                                                        <select value={itemDiscountBeliType2} onChange={e => setItemDiscountBeliType2(e.target.value)} className="h-7 px-1 border border-orange-100 rounded text-xs bg-white outline-none" style={{width:'42px'}}>
+                                                            <option value="%">%</option><option value="Rp">Rp</option>
+                                                        </select>
+                                                        <input type="number" className="flex-1 h-7 px-2 border border-orange-100 rounded text-xs bg-white outline-none focus:border-orange-300" placeholder="0 (opsional)" value={itemDiscountBeli2} onChange={e => setItemDiscountBeli2(e.target.value)} min="0" />
+                                                    </div>
+                                                    <div className="flex gap-1 items-center">
+                                                        <span className="text-[10px] text-slate-400 w-8">D3</span>
+                                                        <select value={itemDiscountBeliType3} onChange={e => setItemDiscountBeliType3(e.target.value)} className="h-7 px-1 border border-orange-100 rounded text-xs bg-white outline-none" style={{width:'42px'}}>
+                                                            <option value="%">%</option><option value="Rp">Rp</option>
+                                                        </select>
+                                                        <input type="number" className="flex-1 h-7 px-2 border border-orange-100 rounded text-xs bg-white outline-none focus:border-orange-300" placeholder="0 (opsional)" value={itemDiscountBeli3} onChange={e => setItemDiscountBeli3(e.target.value)} min="0" />
                                                     </div>
                                                 </div>
-                                                {itemBuyPrice && itemDiscountBeli && parseFloat(itemDiscountBeli) > 0 && (
-                                                    <div className="text-right pb-1">
-                                                        <span className="text-[10px] text-slate-400">Harga beli efektif:</span>
-                                                        <p className="text-xs font-bold text-teal-700">
-                                                            {formatRupiah(
-                                                                itemDiscountBeliType === 'Rp'
-                                                                    ? Math.max(0, parseFloat(itemBuyPrice||0) - parseFloat(itemDiscountBeli||0))
-                                                                    : parseFloat(itemBuyPrice||0) * (1 - parseFloat(itemDiscountBeli||0)/100)
-                                                            )}
-                                                        </p>
-                                                    </div>
-                                                )}
+                                                {itemBuyPrice && (parseFloat(itemDiscountBeli||0) > 0 || parseFloat(itemDiscountBeli2||0) > 0 || parseFloat(itemDiscountBeli3||0) > 0) && (() => {
+                                                    let p = parseFloat(itemBuyPrice||0);
+                                                    if (parseFloat(itemDiscountBeli||0) > 0) p = itemDiscountBeliType === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli)) : p * (1 - parseFloat(itemDiscountBeli)/100);
+                                                    if (parseFloat(itemDiscountBeli2||0) > 0) p = itemDiscountBeliType2 === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli2)) : p * (1 - parseFloat(itemDiscountBeli2)/100);
+                                                    if (parseFloat(itemDiscountBeli3||0) > 0) p = itemDiscountBeliType3 === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli3)) : p * (1 - parseFloat(itemDiscountBeli3)/100);
+                                                    return <p className="text-[10px] text-teal-700 font-bold mt-1 text-right">Efektif: {formatRupiah(p)}</p>;
+                                                })()}
                                             </div>
                                             {/* No. Batch per barang */}
                                             <div className="mb-2">
@@ -5186,18 +5248,22 @@
                                                             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                                                 <span className="text-[11px] text-slate-500">Qty: <b>{item.qty}</b></span>
                                                                 {item.buyPrice > 0 && <span className="text-[11px] text-orange-500 font-bold">Beli: {formatRupiah(item.buyPrice)}</span>}
-                                                                {item.discountBeli > 0 && (
+                                                                {(item.discountBeli > 0 || item.discountBeli2 > 0 || item.discountBeli3 > 0) && (
                                                                     <span className="text-[10px] text-red-500 font-bold bg-red-50 px-1.5 py-0.5 rounded">
-                                                                        Disc: {item.discountBeliType === 'Rp' ? `-${formatRupiah(item.discountBeli)}` : `-${item.discountBeli}%`}
+                                                                        {[
+                                                                            item.discountBeli > 0 ? (item.discountBeliType === 'Rp' ? `-${formatRupiah(item.discountBeli)}` : `-${item.discountBeli}%`) : null,
+                                                                            item.discountBeli2 > 0 ? (item.discountBeliType2 === 'Rp' ? `-${formatRupiah(item.discountBeli2)}` : `-${item.discountBeli2}%`) : null,
+                                                                            item.discountBeli3 > 0 ? (item.discountBeliType3 === 'Rp' ? `-${formatRupiah(item.discountBeli3)}` : `-${item.discountBeli3}%`) : null,
+                                                                        ].filter(Boolean).join(' + ')}
                                                                     </span>
                                                                 )}
-                                                                {item.discountBeli > 0 && item.buyPrice > 0 && (
+                                                                {item.buyPrice > 0 && (item.discountBeli > 0 || item.discountBeli2 > 0 || item.discountBeli3 > 0) && (
                                                                     <span className="text-[11px] text-teal-600 font-bold">
-                                                                        Efektif: {formatRupiah(item.discountBeliType === 'Rp' ? Math.max(0, item.buyPrice - item.discountBeli) : item.buyPrice * (1 - item.discountBeli/100))}
+                                                                        Efektif: {formatRupiah(calcEffBuyPrice(item.buyPrice, item))}
                                                                     </span>
                                                                 )}
                                                                 <span className="text-[11px] text-slate-500">Jual: {formatRupiah(item.price)}</span>
-                                                                <span className="text-[11px] text-teal-600 font-bold">= {formatRupiah(item.qty * (item.discountBeli > 0 ? (item.discountBeliType === 'Rp' ? Math.max(0, item.buyPrice - item.discountBeli) : item.buyPrice * (1 - item.discountBeli/100)) : (item.buyPrice || 0)))}</span>
+                                                                <span className="text-[11px] text-teal-600 font-bold">= {formatRupiah(item.qty * calcEffBuyPrice(item.buyPrice || 0, item))}</span>
                                                                 {item.batchNo && <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">Batch: {item.batchNo}</span>}
                                                                 {item.exp && <span className="text-[10px] text-rose-600 font-bold bg-rose-50 px-1.5 py-0.5 rounded">ED: {item.exp}</span>}
                                                             </div>
@@ -5222,10 +5288,9 @@
                                         const subtotal = invoiceData.items.reduce((s, it) => {
                                             const bp = it.buyPrice || 0;
                                             let eff = bp;
-                                            if (it.discountBeli && it.discountBeli > 0) {
-                                                if (it.discountBeliType === 'Rp') { eff = Math.max(0, bp - it.discountBeli); }
-                                                else { eff = bp * (1 - it.discountBeli / 100); }
-                                            }
+                                            if (it.discountBeli > 0) eff = it.discountBeliType === 'Rp' ? Math.max(0, eff - it.discountBeli) : eff * (1 - it.discountBeli / 100);
+                                            if (it.discountBeli2 > 0) eff = it.discountBeliType2 === 'Rp' ? Math.max(0, eff - it.discountBeli2) : eff * (1 - it.discountBeli2 / 100);
+                                            if (it.discountBeli3 > 0) eff = it.discountBeliType3 === 'Rp' ? Math.max(0, eff - it.discountBeli3) : eff * (1 - it.discountBeli3 / 100);
                                             return s + it.qty * eff;
                                         }, 0);
                                         const numDiskon = parseInt((diskon || '0').replace(/\D/g,'')) || 0;
@@ -5360,12 +5425,22 @@
                                                         <div>
                                                             <p className="text-xs font-bold text-slate-800">{item.name}</p>
                                                             <p className="text-[10px] text-orange-500 font-bold mt-0.5">{item.qty} × Beli {formatRupiah(item.buyPrice || 0)}</p>
-                                                            {item.discountBeli > 0 && (
-                                                                <p className="text-[10px] text-red-500 font-bold mt-0.5">
-                                                                    Disc Beli: {item.discountBeliType === 'Rp' ? `-${formatRupiah(item.discountBeli)}` : `-${item.discountBeli}%`}
-                                                                    {' '}→ Efektif: {formatRupiah(item.discountBeliType === 'Rp' ? Math.max(0, (item.buyPrice||0) - item.discountBeli) : (item.buyPrice||0) * (1 - item.discountBeli/100))}
-                                                                </p>
-                                                            )}
+                                                            {(item.discountBeli > 0 || item.discountBeli2 > 0 || item.discountBeli3 > 0) && (() => {
+                                                                const discs = [
+                                                                    item.discountBeli > 0 ? (item.discountBeliType === 'Rp' ? `-${formatRupiah(item.discountBeli)}` : `-${item.discountBeli}%`) : null,
+                                                                    item.discountBeli2 > 0 ? (item.discountBeliType2 === 'Rp' ? `-${formatRupiah(item.discountBeli2)}` : `-${item.discountBeli2}%`) : null,
+                                                                    item.discountBeli3 > 0 ? (item.discountBeliType3 === 'Rp' ? `-${formatRupiah(item.discountBeli3)}` : `-${item.discountBeli3}%`) : null,
+                                                                ].filter(Boolean);
+                                                                let eff = item.buyPrice || 0;
+                                                                if (item.discountBeli > 0) eff = item.discountBeliType === 'Rp' ? Math.max(0, eff - item.discountBeli) : eff * (1 - item.discountBeli/100);
+                                                                if (item.discountBeli2 > 0) eff = item.discountBeliType2 === 'Rp' ? Math.max(0, eff - item.discountBeli2) : eff * (1 - item.discountBeli2/100);
+                                                                if (item.discountBeli3 > 0) eff = item.discountBeliType3 === 'Rp' ? Math.max(0, eff - item.discountBeli3) : eff * (1 - item.discountBeli3/100);
+                                                                return (
+                                                                    <p className="text-[10px] text-red-500 font-bold mt-0.5">
+                                                                        Disc: {discs.join(' + ')} → Efektif: {formatRupiah(eff)}
+                                                                    </p>
+                                                                );
+                                                            })()}
                                                             <p className="text-[10px] text-slate-400 mt-0.5">Harga Jual Toko: {formatRupiah(item.price)}</p>
                                                             {item.batchNo && (
                                                                 <p className="text-[10px] text-indigo-600 font-bold mt-0.5 flex items-center gap-1">
