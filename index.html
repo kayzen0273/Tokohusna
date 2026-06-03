@@ -128,9 +128,18 @@
         .fade-in { animation: fadeIn 0.4s ease-out; }
         .slide-up { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
         .pop-in { animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .slide-in-right { animation: slideInRight 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes popIn { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
+        @keyframes slideInRight { from { transform: translateX(100%); opacity: 0.6; } to { transform: translateX(0); opacity: 1; } }
+        .tx-detail-row { display: flex; flex-direction: column; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+        .tx-detail-row:last-child { border-bottom: none; }
+        .tx-detail-label { font-size: 11px; color: #0f172a; margin-bottom: 3px; }
+        .tx-detail-value { font-size: 13.5px; color: #0f172a; font-weight: 500; }
+        .tx-section-title { font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 8px; }
+        .tx-items-table-header { display: flex; font-size: 11px; font-weight: 700; color: #0f172a; padding-bottom: 8px; border-bottom: 1.5px solid #0f172a; }
+        .tx-items-row { display: flex; align-items: flex-start; padding: 10px 0; border-bottom: 1.5px solid #0f172a; }
         .typing-dot { height: 6px; width: 6px; background-color: #0ea5e9; border-radius: 50%; display: inline-block; animation: typing 1.4s infinite ease-in-out both; margin: 0 2px; }
         .typing-dot:nth-child(1) { animation-delay: -0.32s; }
         .typing-dot:nth-child(2) { animation-delay: -0.16s; }
@@ -273,6 +282,7 @@
         .exp-banner-enter { animation: expBannerIn  0.45s cubic-bezier(0.16,1,0.3,1) forwards; }
         .exp-banner-exit  { animation: expBannerOut 0.4s  ease-in            forwards; }
         body.filter-panel-open .mobile-topbar { display: none !important; }
+        body.tx-detail-open .mobile-topbar { display: none !important; }
     </style>
 </head>
 <body class="relative">
@@ -951,7 +961,14 @@
                 // if (settings.storeHeader3 && (!headers.length)) { encoder.text(settings.storeHeader3).newline(); }
                 headers.forEach(h => { if(h && h.trim()) encoder.text(h).newline(); });
                 
-                encoder.line().alignLeft().text(`Tgl: ${new Date(receipt.date.seconds ? receipt.date.toDate() : receipt.date).toLocaleString('id-ID')}`).newline().line();
+                const receiptDate = receipt.date.seconds ? receipt.date.toDate() : new Date(receipt.date);
+                const hariIndo = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][receiptDate.getDay()];
+                encoder.line().alignLeft()
+                    .text(`Tgl: ${hariIndo}, ${receiptDate.toLocaleDateString('id-ID')} ${receiptDate.toLocaleTimeString('id-ID')}`)
+                    .newline()
+                    .text(`Dilayani oleh: ${receipt.cashierName || 'Kasir'}`)
+                    .newline()
+                    .line();
                 let racikanCountBt = 0;
                 receipt.items.forEach(item => {
                     const validQty = item.cartQty - (item.returnedQty || 0);
@@ -987,8 +1004,11 @@
                 encoder.bold(true); printRow("TOTAL", validTotal); encoder.bold(false);
                 const payMethod = receipt.paymentMethod || 'tunai';
                 const payLabel = payMethod === 'qris' ? 'QRIS' : payMethod === 'transfer' ? 'TRANSFER' : 'TUNAI';
+                const totalReturnedBt = receipt.items.reduce((acc, item) => acc + (item.price * (item.returnedQty || 0)), 0);
+                const hasReturBt = totalReturnedBt > 0;
+                const kembalianBt = hasReturBt ? (receipt.pay || 0) - (validTotal - totalReturnedBt) : (receipt.change || 0);
                 if (receipt.pay !== undefined) { printRow(payLabel, receipt.pay); }
-                if (payMethod === 'tunai' && receipt.change !== undefined) { printRow("KEMBALI", receipt.change); }
+                if (payMethod === 'tunai' && receipt.pay !== undefined) { printRow("KEMBALI", kembalianBt); }
                 encoder.feed(2).alignCenter().bold(false);
                 
                 // --- USE STORE SPECIFIC FOOTER ---
@@ -996,7 +1016,7 @@
                 const footerLines = footerText.split('\n');
                 footerLines.forEach(line => { if(line && line.trim() !== "") { encoder.text(line.trim()).newline(); } });
                 
-                if (receipt.status === 'returned' || receipt.status === 'partial') { encoder.text(receipt.status === 'returned' ? "RETUR FULL" : "ADA RETUR SEBAGIAN").newline(); }
+                if (receipt.status === 'returned') { encoder.text("RETUR FULL").newline(); }
                 encoder.feed(3);
                 const encodedData = encoder.encode();
                 const MAX_CHUNK_SIZE = 50; 
@@ -5123,11 +5143,32 @@
                                                     </div>
                                                 </div>
                                                 {itemBuyPrice && (parseFloat(itemDiscountBeli||0) > 0 || parseFloat(itemDiscountBeli2||0) > 0 || parseFloat(itemDiscountBeli3||0) > 0) && (() => {
+                                                    const steps = [];
                                                     let p = parseFloat(itemBuyPrice||0);
-                                                    if (parseFloat(itemDiscountBeli||0) > 0) p = itemDiscountBeliType === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli)) : p * (1 - parseFloat(itemDiscountBeli)/100);
-                                                    if (parseFloat(itemDiscountBeli2||0) > 0) p = itemDiscountBeliType2 === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli2)) : p * (1 - parseFloat(itemDiscountBeli2)/100);
-                                                    if (parseFloat(itemDiscountBeli3||0) > 0) p = itemDiscountBeliType3 === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli3)) : p * (1 - parseFloat(itemDiscountBeli3)/100);
-                                                    return <p className="text-[10px] text-teal-700 font-bold mt-1 text-right">Efektif: {formatRupiah(p)}</p>;
+                                                    if (parseFloat(itemDiscountBeli||0) > 0) {
+                                                        p = itemDiscountBeliType === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli)) : p * (1 - parseFloat(itemDiscountBeli)/100);
+                                                        steps.push({ d: itemDiscountBeliType === 'Rp' ? `-Rp${parseFloat(itemDiscountBeli).toLocaleString('id')}` : `-${itemDiscountBeli}%`, r: p });
+                                                    }
+                                                    if (parseFloat(itemDiscountBeli2||0) > 0) {
+                                                        p = itemDiscountBeliType2 === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli2)) : p * (1 - parseFloat(itemDiscountBeli2)/100);
+                                                        steps.push({ d: itemDiscountBeliType2 === 'Rp' ? `-Rp${parseFloat(itemDiscountBeli2).toLocaleString('id')}` : `-${itemDiscountBeli2}%`, r: p });
+                                                    }
+                                                    if (parseFloat(itemDiscountBeli3||0) > 0) {
+                                                        p = itemDiscountBeliType3 === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli3)) : p * (1 - parseFloat(itemDiscountBeli3)/100);
+                                                        steps.push({ d: itemDiscountBeliType3 === 'Rp' ? `-Rp${parseFloat(itemDiscountBeli3).toLocaleString('id')}` : `-${itemDiscountBeli3}%`, r: p });
+                                                    }
+                                                    return (
+                                                        <div className="mt-1 flex flex-col gap-0.5 items-end">
+                                                            {steps.map((s, i) => (
+                                                                <p key={i} className="text-[10px] flex items-center gap-1">
+                                                                    <span className="text-slate-400">D{i+1}</span>
+                                                                    <span className="text-red-500 font-bold bg-red-50 px-1 rounded">{s.d}</span>
+                                                                    <span className="text-slate-400">→</span>
+                                                                    <span className={`font-bold ${i === steps.length - 1 ? 'text-teal-700' : 'text-slate-500'}`}>{formatRupiah(s.r)}</span>
+                                                                </p>
+                                                            ))}
+                                                        </div>
+                                                    );
                                                 })()}
                                             </div>
                                             <div className="mb-3">
@@ -5198,11 +5239,32 @@
                                                     </div>
                                                 </div>
                                                 {itemBuyPrice && (parseFloat(itemDiscountBeli||0) > 0 || parseFloat(itemDiscountBeli2||0) > 0 || parseFloat(itemDiscountBeli3||0) > 0) && (() => {
+                                                    const steps = [];
                                                     let p = parseFloat(itemBuyPrice||0);
-                                                    if (parseFloat(itemDiscountBeli||0) > 0) p = itemDiscountBeliType === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli)) : p * (1 - parseFloat(itemDiscountBeli)/100);
-                                                    if (parseFloat(itemDiscountBeli2||0) > 0) p = itemDiscountBeliType2 === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli2)) : p * (1 - parseFloat(itemDiscountBeli2)/100);
-                                                    if (parseFloat(itemDiscountBeli3||0) > 0) p = itemDiscountBeliType3 === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli3)) : p * (1 - parseFloat(itemDiscountBeli3)/100);
-                                                    return <p className="text-[10px] text-teal-700 font-bold mt-1 text-right">Efektif: {formatRupiah(p)}</p>;
+                                                    if (parseFloat(itemDiscountBeli||0) > 0) {
+                                                        p = itemDiscountBeliType === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli)) : p * (1 - parseFloat(itemDiscountBeli)/100);
+                                                        steps.push({ d: itemDiscountBeliType === 'Rp' ? `-Rp${parseFloat(itemDiscountBeli).toLocaleString('id')}` : `-${itemDiscountBeli}%`, r: p });
+                                                    }
+                                                    if (parseFloat(itemDiscountBeli2||0) > 0) {
+                                                        p = itemDiscountBeliType2 === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli2)) : p * (1 - parseFloat(itemDiscountBeli2)/100);
+                                                        steps.push({ d: itemDiscountBeliType2 === 'Rp' ? `-Rp${parseFloat(itemDiscountBeli2).toLocaleString('id')}` : `-${itemDiscountBeli2}%`, r: p });
+                                                    }
+                                                    if (parseFloat(itemDiscountBeli3||0) > 0) {
+                                                        p = itemDiscountBeliType3 === 'Rp' ? Math.max(0, p - parseFloat(itemDiscountBeli3)) : p * (1 - parseFloat(itemDiscountBeli3)/100);
+                                                        steps.push({ d: itemDiscountBeliType3 === 'Rp' ? `-Rp${parseFloat(itemDiscountBeli3).toLocaleString('id')}` : `-${itemDiscountBeli3}%`, r: p });
+                                                    }
+                                                    return (
+                                                        <div className="mt-1 flex flex-col gap-0.5 items-end">
+                                                            {steps.map((s, i) => (
+                                                                <p key={i} className="text-[10px] flex items-center gap-1">
+                                                                    <span className="text-slate-400">D{i+1}</span>
+                                                                    <span className="text-red-500 font-bold bg-red-50 px-1 rounded">{s.d}</span>
+                                                                    <span className="text-slate-400">→</span>
+                                                                    <span className={`font-bold ${i === steps.length - 1 ? 'text-teal-700' : 'text-slate-500'}`}>{formatRupiah(s.r)}</span>
+                                                                </p>
+                                                            ))}
+                                                        </div>
+                                                    );
                                                 })()}
                                             </div>
                                             {/* No. Batch per barang */}
@@ -5248,20 +5310,33 @@
                                                             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                                                 <span className="text-[11px] text-slate-500">Qty: <b>{item.qty}</b></span>
                                                                 {item.buyPrice > 0 && <span className="text-[11px] text-orange-500 font-bold">Beli: {formatRupiah(item.buyPrice)}</span>}
-                                                                {(item.discountBeli > 0 || item.discountBeli2 > 0 || item.discountBeli3 > 0) && (
-                                                                    <span className="text-[10px] text-red-500 font-bold bg-red-50 px-1.5 py-0.5 rounded">
-                                                                        {[
-                                                                            item.discountBeli > 0 ? (item.discountBeliType === 'Rp' ? `-${formatRupiah(item.discountBeli)}` : `-${item.discountBeli}%`) : null,
-                                                                            item.discountBeli2 > 0 ? (item.discountBeliType2 === 'Rp' ? `-${formatRupiah(item.discountBeli2)}` : `-${item.discountBeli2}%`) : null,
-                                                                            item.discountBeli3 > 0 ? (item.discountBeliType3 === 'Rp' ? `-${formatRupiah(item.discountBeli3)}` : `-${item.discountBeli3}%`) : null,
-                                                                        ].filter(Boolean).join(' + ')}
-                                                                    </span>
-                                                                )}
-                                                                {item.buyPrice > 0 && (item.discountBeli > 0 || item.discountBeli2 > 0 || item.discountBeli3 > 0) && (
-                                                                    <span className="text-[11px] text-teal-600 font-bold">
-                                                                        Efektif: {formatRupiah(calcEffBuyPrice(item.buyPrice, item))}
-                                                                    </span>
-                                                                )}
+                                                                {item.buyPrice > 0 && (item.discountBeli > 0 || item.discountBeli2 > 0 || item.discountBeli3 > 0) && (() => {
+                                                                    const steps = [];
+                                                                    let p = item.buyPrice;
+                                                                    if (item.discountBeli > 0) {
+                                                                        p = item.discountBeliType === 'Rp' ? Math.max(0, p - item.discountBeli) : p * (1 - item.discountBeli/100);
+                                                                        steps.push({ label: item.discountBeliType === 'Rp' ? `-${formatRupiah(item.discountBeli)}` : `-${item.discountBeli}%`, result: p });
+                                                                    }
+                                                                    if (item.discountBeli2 > 0) {
+                                                                        p = item.discountBeliType2 === 'Rp' ? Math.max(0, p - item.discountBeli2) : p * (1 - item.discountBeli2/100);
+                                                                        steps.push({ label: item.discountBeliType2 === 'Rp' ? `-${formatRupiah(item.discountBeli2)}` : `-${item.discountBeli2}%`, result: p });
+                                                                    }
+                                                                    if (item.discountBeli3 > 0) {
+                                                                        p = item.discountBeliType3 === 'Rp' ? Math.max(0, p - item.discountBeli3) : p * (1 - item.discountBeli3/100);
+                                                                        steps.push({ label: item.discountBeliType3 === 'Rp' ? `-${formatRupiah(item.discountBeli3)}` : `-${item.discountBeli3}%`, result: p });
+                                                                    }
+                                                                    return (
+                                                                        <span className="flex items-center gap-1 flex-wrap">
+                                                                            {steps.map((s, i) => (
+                                                                                <span key={i} className="flex items-center gap-1">
+                                                                                    <span className="text-[10px] text-red-500 font-bold bg-red-50 px-1 py-0.5 rounded">{s.label}</span>
+                                                                                    <span className="text-[10px] text-slate-400">→</span>
+                                                                                    <span className={`text-[10px] font-bold ${i === steps.length - 1 ? 'text-teal-600' : 'text-slate-500'}`}>{formatRupiah(s.result)}</span>
+                                                                                </span>
+                                                                            ))}
+                                                                        </span>
+                                                                    );
+                                                                })()}
                                                                 <span className="text-[11px] text-slate-500">Jual: {formatRupiah(item.price)}</span>
                                                                 <span className="text-[11px] text-teal-600 font-bold">= {formatRupiah(item.qty * calcEffBuyPrice(item.buyPrice || 0, item))}</span>
                                                                 {item.batchNo && <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">Batch: {item.batchNo}</span>}
@@ -5426,19 +5501,32 @@
                                                             <p className="text-xs font-bold text-slate-800">{item.name}</p>
                                                             <p className="text-[10px] text-orange-500 font-bold mt-0.5">{item.qty} × Beli {formatRupiah(item.buyPrice || 0)}</p>
                                                             {(item.discountBeli > 0 || item.discountBeli2 > 0 || item.discountBeli3 > 0) && (() => {
-                                                                const discs = [
-                                                                    item.discountBeli > 0 ? (item.discountBeliType === 'Rp' ? `-${formatRupiah(item.discountBeli)}` : `-${item.discountBeli}%`) : null,
-                                                                    item.discountBeli2 > 0 ? (item.discountBeliType2 === 'Rp' ? `-${formatRupiah(item.discountBeli2)}` : `-${item.discountBeli2}%`) : null,
-                                                                    item.discountBeli3 > 0 ? (item.discountBeliType3 === 'Rp' ? `-${formatRupiah(item.discountBeli3)}` : `-${item.discountBeli3}%`) : null,
-                                                                ].filter(Boolean);
-                                                                let eff = item.buyPrice || 0;
-                                                                if (item.discountBeli > 0) eff = item.discountBeliType === 'Rp' ? Math.max(0, eff - item.discountBeli) : eff * (1 - item.discountBeli/100);
-                                                                if (item.discountBeli2 > 0) eff = item.discountBeliType2 === 'Rp' ? Math.max(0, eff - item.discountBeli2) : eff * (1 - item.discountBeli2/100);
-                                                                if (item.discountBeli3 > 0) eff = item.discountBeliType3 === 'Rp' ? Math.max(0, eff - item.discountBeli3) : eff * (1 - item.discountBeli3/100);
+                                                                const steps = [];
+                                                                let p = item.buyPrice || 0;
+                                                                if (item.discountBeli > 0) {
+                                                                    p = item.discountBeliType === 'Rp' ? Math.max(0, p - item.discountBeli) : p * (1 - item.discountBeli/100);
+                                                                    steps.push({ label: item.discountBeliType === 'Rp' ? `-${formatRupiah(item.discountBeli)}` : `-${item.discountBeli}%`, result: p });
+                                                                }
+                                                                if (item.discountBeli2 > 0) {
+                                                                    p = item.discountBeliType2 === 'Rp' ? Math.max(0, p - item.discountBeli2) : p * (1 - item.discountBeli2/100);
+                                                                    steps.push({ label: item.discountBeliType2 === 'Rp' ? `-${formatRupiah(item.discountBeli2)}` : `-${item.discountBeli2}%`, result: p });
+                                                                }
+                                                                if (item.discountBeli3 > 0) {
+                                                                    p = item.discountBeliType3 === 'Rp' ? Math.max(0, p - item.discountBeli3) : p * (1 - item.discountBeli3/100);
+                                                                    steps.push({ label: item.discountBeliType3 === 'Rp' ? `-${formatRupiah(item.discountBeli3)}` : `-${item.discountBeli3}%`, result: p });
+                                                                }
                                                                 return (
-                                                                    <p className="text-[10px] text-red-500 font-bold mt-0.5">
-                                                                        Disc: {discs.join(' + ')} → Efektif: {formatRupiah(eff)}
-                                                                    </p>
+                                                                    <div className="mt-0.5 flex flex-col gap-0.5">
+                                                                        {steps.map((s, i) => (
+                                                                            <p key={i} className="text-[10px] flex items-center gap-1">
+                                                                                <span className="text-slate-400">D{i+1}</span>
+                                                                                <span className="text-red-500 font-bold bg-red-50 px-1 rounded">{s.label}</span>
+                                                                                <span className="text-slate-400">→</span>
+                                                                                <span className={`font-bold ${i === steps.length - 1 ? 'text-teal-600' : 'text-slate-500'}`}>{formatRupiah(s.result)}</span>
+                                                                                {i === steps.length - 1 && <span className="text-slate-300 text-[9px]">(efektif)</span>}
+                                                                            </p>
+                                                                        ))}
+                                                                    </div>
                                                                 );
                                                             })()}
                                                             <p className="text-[10px] text-slate-400 mt-0.5">Harga Jual Toko: {formatRupiah(item.price)}</p>
@@ -8888,11 +8976,21 @@
             const [transactions, setTransactions] = useState([]);
             const [loading, setLoading] = useState(true);
             const [selectedTx, setSelectedTx] = useState(null);
+            const [showPrintMenu, setShowPrintMenu] = useState(false);
             const [purchasesData, setPurchasesData] = useState([]);
             
             const [returModal, setReturModal] = useState({ show: false, tx: null, item: null, index: -1 });
             const [qtyToRetur, setQtyToRetur] = useState(1);
             const [processingRetur, setProcessingRetur] = useState(false);
+            // === RETUR MULTI-STEP (sub-page flow) ===
+            const [returStep, setReturStep] = useState(null); // null | 'step1' | 'step2'
+            const [returItemsState, setReturItemsState] = useState([]);
+            const [returWithBatch, setReturWithBatch] = useState(false);
+            const [returAlasan, setReturAlasan] = useState('');
+            const [returPayMethod, setReturPayMethod] = useState('tunai');
+            const [returTotalKembali, setReturTotalKembali] = useState('');
+            const [returNote, setReturNote] = useState('');
+            const [processingReturNew, setProcessingReturNew] = useState(false);
             
             const [btDevice, setBtDevice] = useState(null);
             const [selectedDate, setSelectedDate] = useState(new Date());
@@ -8916,6 +9014,16 @@
                 }
             }, [defaultOpenTransactionId, transactions]);
 
+            // Sembunyikan mobile-topbar saat sub-page detail terbuka
+            useEffect(() => {
+                if (selectedTx) {
+                    document.body.classList.add('tx-detail-open');
+                } else {
+                    document.body.classList.remove('tx-detail-open');
+                }
+                return () => document.body.classList.remove('tx-detail-open');
+            }, [selectedTx]);
+
             const [historySearch, setHistorySearch] = useState('');
             const [historySearchInput, setHistorySearchInput] = useState('');
             const [racikanInfoModal, setRacikanInfoModal] = useState(null);
@@ -8937,6 +9045,10 @@
             const [uploadingProof, setUploadingProof] = useState(false);
             const [deletingProof, setDeletingProof] = useState(false);
             const [showDeleteProofConfirm, setShowDeleteProofConfirm] = useState(false);
+            const [showEditTransferPage, setShowEditTransferPage] = useState(false);
+            const [editTransferForm, setEditTransferForm] = useState({ keterangan: '', proofImage: null, proofChanged: false });
+            const [proofImageModal, setProofImageModal] = useState(null);
+            const editTransferProofRef = React.useRef(null);
             const historyProofInputRef = React.useRef(null);
 
             const handleHistoryProofUpload = (e) => {
@@ -8988,6 +9100,46 @@
                     setDeletingProof(false);
                     setShowDeleteProofConfirm(false);
                 }
+            };
+
+            const handleSaveEditTransfer = async () => {
+                if (!selectedTx) return;
+                setUploadingProof(true);
+                try {
+                    const updates = { paymentNote: editTransferForm.keterangan };
+                    if (editTransferForm.proofChanged) updates.paymentProofImage = editTransferForm.proofImage;
+                    const txRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions', selectedTx.id);
+                    await window.updateDoc(txRef, updates);
+                    setSelectedTx(prev => ({ ...prev, ...updates }));
+                    showToast('Berhasil disimpan ✅');
+                    setShowEditTransferPage(false);
+                } catch (err) {
+                    showToast('Gagal menyimpan', 'error');
+                } finally {
+                    setUploadingProof(false);
+                }
+            };
+
+            const handleEditTransferProof = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new window.Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX = 800;
+                        let w = img.width, h = img.height;
+                        if (w > MAX || h > MAX) { if (w > h) { h = Math.round(h * MAX / w); w = MAX; } else { w = Math.round(w * MAX / h); h = MAX; } }
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        const base64 = canvas.toDataURL('image/jpeg', 0.75);
+                        setEditTransferForm(prev => ({ ...prev, proofImage: base64, proofChanged: true }));
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+                e.target.value = '';
             };
 
             useEffect(() => {
@@ -9189,6 +9341,86 @@
 
             const openReturModal = (tx, item, index) => { const maxRetur = item.cartQty - (item.returnedQty || 0); if (maxRetur <= 0) { showToast("Barang ini sudah diretur semua", "error"); return; } setReturModal({ show: true, tx, item, index, max: maxRetur }); setQtyToRetur(maxRetur); };
 
+            // Buka sub-page retur (flow baru: step1 → step2)
+            const openReturPage = (tx) => {
+                if (!canReturOldTransaction(tx)) { showToast('Hanya Owner atau akun yang diizinkan yang bisa retur transaksi kemarin & sebelumnya', 'error'); return; }
+                const rItems = tx.items
+                    .map((item, origIdx) => ({ ...item, origIdx, maxRetur: item.cartQty - (item.returnedQty || 0) }))
+                    .filter(item => item.maxRetur > 0)
+                    .map(item => ({ ...item, checked: false, returQty: item.maxRetur }));
+                if (rItems.length === 0) { showToast('Semua item sudah diretur', 'error'); return; }
+                setReturItemsState(rItems);
+                setReturAlasan('');
+                setReturWithBatch(false);
+                setReturStep('step1');
+            };
+
+            // Step1 → Step2: validasi lalu pindah ke pilih metode pembayaran
+            const handleReturLanjut = () => {
+                const selItems = returItemsState.filter(i => i.checked);
+                if (selItems.length === 0) { showToast('Pilih minimal satu barang untuk diretur', 'error'); return; }
+                if (!returAlasan.trim()) { showToast('Alasan retur wajib diisi', 'error'); return; }
+                const total = selItems.reduce((acc, i) => acc + (i.price * i.returQty), 0);
+                setReturPayMethod('tunai');
+                setReturTotalKembali(String(total));
+                setReturNote('');
+                setReturStep('step2');
+            };
+
+            // Step2: proses retur ke Firestore
+            const handleProcessReturNew = async () => {
+                const selItems = returItemsState.filter(i => i.checked);
+                if (!selectedTx || !user || selItems.length === 0) return;
+                setProcessingReturNew(true);
+                try {
+                    const batch = window.writeBatch(window.db);
+                    const storeIdToReturn = selectedTx.storeId || 'default';
+                    const stockField = `stocks.${storeIdToReturn}`;
+                    const updatedItems = [...selectedTx.items];
+                    for (const ri of selItems) {
+                        const origIdx = ri.origIdx !== undefined ? ri.origIdx : selectedTx.items.findIndex(i => i.id === ri.id);
+                        if (origIdx === -1) continue;
+                        if (ri.isRacikanGroup) {
+                            (ri.racikanItems || []).forEach(b => {
+                                const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', b.id);
+                                batch.update(ref, { [stockField]: window.increment(b.qty * ri.returQty), updatedAt: window.serverTimestamp() });
+                            });
+                        } else {
+                            const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', ri.id);
+                            batch.update(ref, { [stockField]: window.increment(ri.returQty * (ri.packageQtyPerUnit || 1)) });
+                        }
+                        updatedItems[origIdx].returnedQty = (updatedItems[origIdx].returnedQty || 0) + ri.returQty;
+                    }
+                    let totalQty = 0, returnedQty = 0;
+                    updatedItems.forEach(i => { totalQty += i.cartQty; returnedQty += (i.returnedQty || 0); });
+                    const newStatus = returnedQty === totalQty ? 'returned' : returnedQty > 0 ? 'partial' : selectedTx.status;
+                    const txRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions', selectedTx.id);
+                    batch.update(txRef, { items: updatedItems, status: newStatus, returnedAt: window.serverTimestamp(), returPaymentMethod: returPayMethod, returAlasan, returNote, returByName: authSession?.namaLengkap || user?.name || 'Kasir', returTotalDikembalikan: parseInt(returTotalKembali) || 0 });
+                    await batch.commit();
+                    // Update SO physicalMap jika ada sesi aktif
+                    try {
+                        const soCol = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname');
+                        const soQ = window.query(soCol, window.where('status', '==', 'open'), window.where('profileId', '==', storeIdToReturn));
+                        const soSnap = await window.getDocs(soQ);
+                        if (!soSnap.empty) {
+                            const soDocRef = soSnap.docs[0].ref;
+                            const physMap = soSnap.docs[0].data().physicalMap || {};
+                            const soUpdate = {};
+                            for (const ri of selItems) {
+                                if (ri.isRacikanGroup) {
+                                    (ri.racikanItems || []).forEach(b => { if (physMap[b.id] !== undefined) soUpdate[`physicalMap.${b.id}`] = window.increment(b.qty * ri.returQty); });
+                                } else {
+                                    if (physMap[ri.id] !== undefined) soUpdate[`physicalMap.${ri.id}`] = window.increment(ri.returQty * (ri.packageQtyPerUnit || 1));
+                                }
+                            }
+                            if (Object.keys(soUpdate).length > 0) { soUpdate.updatedAt = window.serverTimestamp(); await window.updateDoc(soDocRef, soUpdate); }
+                        }
+                    } catch(soErr) { console.warn('SO physicalMap retur update skipped:', soErr); }
+                    showToast(`Retur ${selItems.length} barang berhasil disimpan`, 'success');
+                    setReturStep(null); setSelectedTx(null);
+                } catch (e) { console.error(e); showToast('Gagal melakukan retur', 'error'); } finally { setProcessingReturNew(false); }
+            };
+
             // Cek apakah transaksi berasal dari hari sebelum hari ini
             const isTxOlderThanToday = (tx) => {
                 if (!tx?.date) return false;
@@ -9236,7 +9468,7 @@
                     updatedItems.forEach(i => { totalItemsCount += i.cartQty; totalReturnedCount += (i.returnedQty || 0); });
                     let newStatus = tx.status;
                     if (totalReturnedCount === totalItemsCount) newStatus = 'returned'; else if (totalReturnedCount > 0) newStatus = 'partial';
-                    batch.update(txRef, { items: updatedItems, status: newStatus, returnedAt: window.serverTimestamp() });
+                    batch.update(txRef, { items: updatedItems, status: newStatus, returnedAt: window.serverTimestamp(), returByName: authSession?.namaLengkap || user?.name || 'Kasir', returTotalDikembalikan: qtyToRetur * (item?.price || 0) });
                     await batch.commit();
 
                     // ── BARU: Update physicalMap di sesi Stock Opname aktif (retur = stok fisik naik) ──
@@ -9823,82 +10055,374 @@
                         )}
                     </div>
                     {selectedTx && (
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
-                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-0 overflow-hidden flex flex-col max-h-[90vh]">
-                                <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><div><h3 className="font-bold text-slate-800">Detail Transaksi</h3><p className="text-[10px] text-slate-500">{selectedTx.id} {selectedTx.storeName ? `(${selectedTx.storeName})` : ''}</p>{selectedTx.cashierName && <div className="flex items-center gap-1 mt-1"><div className="w-4 h-4 rounded-full bg-sky-500 flex items-center justify-center text-white text-[8px] font-black flex-shrink-0">{selectedTx.cashierName.charAt(0).toUpperCase()}</div><span className="text-[10px] font-bold text-sky-700">{selectedTx.cashierName}</span></div>}</div><button onClick={() => setSelectedTx(null)} className="w-8 h-8 rounded-full bg-white text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm"><Icon name="xmark" /></button></div>
-                                <div className="p-5 overflow-y-auto flex-1"><div className="space-y-4">{selectedTx.items.map((item, idx) => { const returnedQty = item.returnedQty || 0; const remainingQty = item.cartQty - returnedQty; const isFullyReturned = remainingQty === 0; const ri = item.racikanInfo; return (<div key={idx} className={`p-3 rounded-xl border ${isFullyReturned ? 'bg-red-50 border-red-100' : item.isRacikanGroup ? 'bg-teal-50 border-teal-100' : 'bg-slate-50 border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div className="flex-1 min-w-0 pr-2"><div className="flex items-center gap-1.5 flex-wrap"><p className={`font-bold text-sm ${isFullyReturned ? 'text-red-600 line-through' : 'text-slate-700'}`}>{item.name}</p>{item.isRacikanGroup && <span className="text-[8px] font-black bg-teal-600 text-white px-1 py-0.5 rounded flex-shrink-0">R/</span>}</div><p className="text-[10px] text-slate-500 mt-0.5">{item.cartQty} x {formatRupiah(item.price)}</p>{returnedQty > 0 && <span className="text-[9px] font-bold text-red-500 bg-red-100 px-1.5 py-0.5 rounded-sm">Sudah Retur: {returnedQty}</span>}{item.isRacikanGroup && ri && (ri.dokter || ri.pasien) && (<button onClick={() => setRacikanInfoModal(item)} className="mt-2 flex items-center gap-1.5 text-teal-600 hover:text-teal-800 text-[10px] font-bold bg-teal-100 hover:bg-teal-200 px-2.5 py-1.5 rounded-lg transition-colors"><Icon name="circle-info" className="text-xs" /> Info Pasien / Dokter</button>)}</div><div className="text-right flex-shrink-0"><p className="font-bold text-slate-800 text-sm">{formatRupiah(item.cartQty * item.price)}</p>{selectedTx.status !== 'returned' && remainingQty > 0 && (<button onClick={() => { if (!canReturOldTransaction(selectedTx)) { showToast('Hanya Owner atau akun yang diizinkan yang bisa retur transaksi kemarin & sebelumnya', 'error'); return; } openReturModal(selectedTx, item, idx); }} className={`mt-2 border text-[10px] font-bold px-2 py-1 rounded-lg transition-colors shadow-sm ${canReturOldTransaction(selectedTx) ? 'bg-white border-red-200 text-red-500 hover:bg-red-50' : 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'}`}>{canReturOldTransaction(selectedTx) ? 'Retur Item' : <span className="flex items-center gap-1"><Icon name="lock" className="text-[9px]" /> Retur (Terkunci)</span>}</button>)}</div></div></div>); })}</div><div className="my-4 border-t border-dashed border-slate-300"></div>{(() => {
-  const subtotalTx = selectedTx.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * (item.cartQty - (item.returnedQty || 0))), 0);
-  const diskonTxRp = subtotalTx - selectedTx.total;
-  const discountedItems = selectedTx.items.filter(i => i.discount && i.discount.value > 0);
-  const uniqTypes = [...new Set(discountedItems.map(i => i.discount.type))];
-  const uniqValues = [...new Set(discountedItems.map(i => i.discount.value))];
-  let diskonLabel = 'Diskon';
-  if (discountedItems.length > 0 && uniqTypes.length === 1) {
-    if (uniqTypes[0] === '%') {
-      diskonLabel = uniqValues.length === 1 ? ('Diskon ' + uniqValues[0] + '%') : 'Diskon (%)';
-    } else {
-      diskonLabel = uniqValues.length === 1 ? ('Diskon ' + formatRupiah(uniqValues[0])) : 'Diskon (Rp)';
-    }
-  }
-  return (<>
-    <div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Subtotal</span><span className="font-medium text-slate-700">{formatRupiah(subtotalTx)}</span></div>
-    {diskonTxRp > 0 && (<div className="flex justify-between text-sm mb-1"><span className="text-red-400 font-medium">{diskonLabel}</span><span className="font-medium text-red-500">- {formatRupiah(diskonTxRp)}</span></div>)}
-    <div className="flex justify-between text-sm mb-1 pt-1 border-t border-slate-100"><span className="font-bold text-slate-700">Total</span><span className="font-bold text-slate-800">{formatRupiah(selectedTx.total)}</span></div>
-  </>);
-})()}<div className="flex justify-between text-sm mb-1 mt-2"><span className="text-slate-500">Metode</span><span className="font-bold text-slate-800">{selectedTx.paymentMethod === 'qris' ? '💳 QRIS' : selectedTx.paymentMethod === 'transfer' ? '🏦 Transfer' : '💵 Tunai'}</span></div><div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Bayar</span><span className="font-bold text-slate-800">{formatRupiah(selectedTx.pay)}</span></div><div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Kembali</span><span className="font-bold text-green-600">{formatRupiah(selectedTx.change)}</span></div>{selectedTx.cashierName && <div className="flex justify-between text-sm mt-1 pt-1 border-t border-dashed border-slate-100"><span className="text-slate-500 flex items-center gap-1"><Icon name="user-tie" className="text-[10px]" /> Kasir</span><span className="font-bold text-sky-700">{selectedTx.cashierName}</span></div>}
-                                    {/* BUKTI PEMBAYARAN - hanya untuk QRIS & Transfer */}
-                                    {(selectedTx.paymentMethod === 'qris' || selectedTx.paymentMethod === 'transfer') && (
-                                        <div className="mt-4">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-5 h-5 rounded-full bg-teal-100 flex items-center justify-center"><Icon name="camera" className="text-teal-600 text-[10px]" /></div>
-                                                    <span className="text-xs font-bold text-teal-700 uppercase tracking-wide">Bukti Pembayaran</span>
-                                                </div>
-                                                {selectedTx.paymentProofImage && (
-                                                    <button onClick={() => setShowDeleteProofConfirm(true)} className="text-[10px] text-red-400 hover:text-red-600 font-bold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors">
-                                                        <Icon name="trash" /> Hapus
+                        <div className="fixed inset-0 z-[100] bg-white overflow-y-auto slide-in-right flex flex-col">
+                            {/* ===== HEADER SUB-PAGE (farmacare-style) ===== */}
+                            <div className="sticky top-0 z-[110] bg-white border-b border-slate-200 flex items-center px-2 py-0" style={{minHeight:'54px'}}>
+                                <button onClick={() => setSelectedTx(null)} className="flex items-center justify-center text-sky-500 flex-shrink-0 active:scale-90 transition-transform" style={{width:'40px',height:'54px'}}>
+                                    <Icon name="arrow-left" className="text-xl" />
+                                </button>
+                                <h2 className="flex-1 text-xl font-semibold text-slate-800 text-center">Detail Transaksi</h2>
+                                <div className="flex gap-2 flex-shrink-0 pr-1">
+                                    {selectedTx.status !== 'returned' && (
+                                        <button
+                                            onClick={() => openReturPage(selectedTx)}
+                                            className="px-4 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-medium active:scale-95 transition-all hover:bg-slate-50"
+                                        >Retur</button>
+                                    )}
+                                    {/* Tombol Cetak dengan dropdown */}
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => setShowPrintMenu(v => !v)}
+                                            className="px-4 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-medium active:scale-95 transition-all hover:bg-slate-50 flex items-center gap-1"
+                                        >
+                                            Cetak
+                                            <Icon name="chevron-down" className={`text-[10px] text-slate-400 transition-transform ${showPrintMenu ? 'rotate-180' : ''}`} />
+                                        </button>
+                                        {showPrintMenu && (
+                                            <>
+                                                {/* Backdrop untuk menutup menu */}
+                                                <div className="fixed inset-0 z-[119]" onClick={() => setShowPrintMenu(false)} />
+                                                <div className="absolute right-0 top-full mt-1.5 w-48 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-[120] fade-in">
+                                                    <button
+                                                        onClick={() => { handlePrint(selectedTx); setShowPrintMenu(false); }}
+                                                        className="w-full text-left px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                                                    >
+                                                        <Icon name="print" className="text-slate-500 w-4 text-center" />
+                                                        Cetak Struk
                                                     </button>
-                                                )}
-                                            </div>
-                                            <input ref={historyProofInputRef} type="file" accept="image/*" className="hidden" onChange={handleHistoryProofUpload} />
-                                            {selectedTx.paymentProofImage ? (
-                                                <div>
-                                                    <div className="rounded-2xl overflow-hidden border-2 border-teal-200 shadow-sm cursor-pointer" onClick={() => window.open(selectedTx.paymentProofImage, '_blank')}>
-                                                        <img src={selectedTx.paymentProofImage} alt="Bukti Pembayaran" className="w-full object-contain max-h-64 bg-slate-50" />
-                                                    </div>
-                                                    <div className="flex gap-2 mt-2">
-                                                        <button onClick={() => historyProofInputRef.current && historyProofInputRef.current.click()} disabled={uploadingProof} className="flex-1 py-2 rounded-xl border border-teal-200 text-teal-600 font-bold text-xs hover:bg-teal-50 transition-all flex items-center justify-center gap-1 active:scale-95">
-                                                            <Icon name="arrow-up-from-bracket" /> {uploadingProof ? 'Menyimpan...' : 'Ganti Bukti'}
-                                                        </button>
-                                                        <button onClick={() => window.open(selectedTx.paymentProofImage, '_blank')} className="flex-1 py-2 rounded-xl border border-slate-200 text-slate-500 font-bold text-xs hover:bg-slate-50 transition-all flex items-center justify-center gap-1 active:scale-95">
-                                                            <Icon name="expand" /> Perbesar
-                                                        </button>
-                                                    </div>
+                                                    <div className="h-px bg-slate-100 mx-3" />
+                                                    <button
+                                                        onClick={() => { handleWAHistory(selectedTx); setShowPrintMenu(false); }}
+                                                        className="w-full text-left px-4 py-3 text-sm font-medium text-slate-700 hover:bg-green-50 flex items-center gap-3 transition-colors"
+                                                    >
+                                                        <Icon name="image" className="text-green-500 w-4 text-center" />
+                                                        Gambar Struk (WA)
+                                                    </button>
                                                 </div>
-                                            ) : (
-                                                <button onClick={() => historyProofInputRef.current && historyProofInputRef.current.click()} disabled={uploadingProof} className="w-full py-5 rounded-2xl border-2 border-dashed border-slate-300 hover:border-teal-400 hover:bg-teal-50 transition-all flex flex-col items-center gap-1.5 active:scale-95">
-                                                    {uploadingProof ? (
-                                                        <><div className="typing-dot bg-teal-500"></div><span className="text-xs text-teal-500 font-bold">Menyimpan...</span></>
-                                                    ) : (
-                                                        <><div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><Icon name="camera" className="text-slate-400" /></div><span className="text-xs font-bold text-slate-500">Tambah Bukti Pembayaran</span><span className="text-[10px] text-slate-400">Foto / pilih dari galeri</span></>
-                                                    )}
-                                                </button>
-                                            )}
-                                            {/* Konfirmasi hapus bukti */}
-                                            {showDeleteProofConfirm && (
-                                                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl">
-                                                    <p className="text-xs font-bold text-red-700 mb-2">Yakin ingin menghapus bukti pembayaran ini?</p>
-                                                    <div className="flex gap-2">
-                                                        <button onClick={() => setShowDeleteProofConfirm(false)} className="flex-1 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50">Batal</button>
-                                                        <button onClick={handleDeleteProof} disabled={deletingProof} className="flex-1 py-1.5 rounded-lg bg-red-500 text-white text-xs font-bold hover:bg-red-600 disabled:opacity-50">{deletingProof ? 'Menghapus...' : 'Ya, Hapus'}</button>
-                                                    </div>
-                                                </div>
-                                            )}
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* ===== TOTAL AMOUNT ===== */}
+                            <div className="px-4 pt-5 pb-5 bg-white">
+                                {selectedTx.status === 'returned' && (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-500 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full mb-2">
+                                        <Icon name="rotate-left" className="text-[10px]" /> Sudah Diretur
+                                    </span>
+                                )}
+                                <div className="text-3xl font-black text-slate-900">{formatRupiah(selectedTx.total)}</div>
+                            </div>
+
+                            {/* ===== DETAIL TRANSAKSI ===== */}
+                            <div className="bg-slate-100" style={{height:'8px'}}></div>
+                            <div className="px-4 pt-4 pb-2 bg-white">
+                                <p className="tx-section-title">Detail transaksi</p>
+                                <div className="tx-detail-row">
+                                    <span className="tx-detail-label">Tipe harga jual</span>
+                                    <span className="tx-detail-value">{selectedTx.tipeTransaksi || 'Harga normal'}</span>
+                                </div>
+                                <div className="tx-detail-row">
+                                    <span className="tx-detail-label">No. transaksi</span>
+                                    <span className="tx-detail-value font-bold">#{selectedTx.id}</span>
+                                </div>
+                                <div className="tx-detail-row">
+                                    <span className="tx-detail-label">No. faktur pajak</span>
+                                    <span className="tx-detail-value text-slate-700 text-xs italic">Belum ditambahkan</span>
+                                </div>
+                                <div className="tx-detail-row">
+                                    <span className="tx-detail-label">Waktu</span>
+                                    <span className="tx-detail-value">{(() => { const d = selectedTx.date?.toDate ? selectedTx.date.toDate() : new Date(selectedTx.date); const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']; return `${d.getFullYear()} ${months[d.getMonth()]} ${d.getDate()}, ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} WIB`; })()}</span>
+                                </div>
+                                {selectedTx.cashierName && (
+                                    <div className="tx-detail-row">
+                                        <span className="tx-detail-label">Kasir</span>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <div className="w-6 h-6 rounded-full bg-sky-500 flex items-center justify-center text-white text-[10px] font-black flex-shrink-0">{selectedTx.cashierName.charAt(0).toUpperCase()}</div>
+                                            <span className="tx-detail-value">{selectedTx.cashierName}</span>
                                         </div>
+                                    </div>
+                                )}
+                                <div className="tx-detail-row">
+                                    <span className="tx-detail-label">Sales</span>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                        <div className="w-6 h-6 rounded-full bg-sky-500 flex items-center justify-center text-white text-[10px] font-black flex-shrink-0">{((selectedTx.salesName || selectedTx.cashierName || 'S').charAt(0)).toUpperCase()}</div>
+                                        <span className="tx-detail-value">{selectedTx.salesName || selectedTx.cashierName || '-'}</span>
+                                    </div>
+                                </div>
+                                {selectedTx.storeName && (
+                                    <div className="tx-detail-row">
+                                        <span className="tx-detail-label">Toko</span>
+                                        <span className="tx-detail-value">{selectedTx.storeName}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* ===== PEMBELI ===== */}
+                            <div className="bg-slate-100" style={{height:'8px'}}></div>
+                            <div className="px-4 pt-4 pb-2 bg-white">
+                                <p className="tx-section-title">Pembeli</p>
+                                <div className="tx-detail-row"><span className="tx-detail-label">Nama</span><span className="tx-detail-value">{selectedTx.pembeli || '-'}</span></div>
+                                <div className="tx-detail-row"><span className="tx-detail-label">Tipe</span><span className="tx-detail-value">-</span></div>
+                                <div className="tx-detail-row"><span className="tx-detail-label">No. telepon</span><span className="tx-detail-value">-</span></div>
+                                <div className="tx-detail-row"><span className="tx-detail-label">Alamat</span><span className="tx-detail-value">-</span></div>
+                                <div className="tx-detail-row"><span className="tx-detail-label">Catatan</span><span className="tx-detail-value">-</span></div>
+                            </div>
+
+                            {/* ===== PEMBAYARAN ===== */}
+                            <div className="bg-slate-100" style={{height:'8px'}}></div>
+                            <div className="px-4 pt-4 pb-2 bg-white">
+                                <div className="flex items-center justify-between mb-1">
+                                    <p className="tx-section-title" style={{marginBottom:0}}>Pembayaran</p>
+                                    {(selectedTx.paymentMethod === 'transfer' || selectedTx.paymentMethod === 'qris') && (
+                                        <button onClick={() => { setEditTransferForm({ keterangan: selectedTx.paymentNote || '', proofImage: selectedTx.paymentProofImage || null, proofChanged: false }); setShowEditTransferPage(true); }} className="flex items-center gap-1 text-teal-600 text-sm font-bold hover:bg-teal-50 px-2 py-1 rounded-lg transition-colors">
+                                            <Icon name="pen" className="text-xs" /> Edit
+                                        </button>
                                     )}
                                 </div>
-                                <div className="p-5 bg-slate-50 border-t border-slate-100 flex gap-3"><button onClick={() => handleWAHistory(selectedTx)} className="flex-1 py-3 rounded-xl bg-green-500 text-white hover:bg-green-600 font-bold shadow-sm active:scale-95 text-sm flex items-center justify-center gap-2"><Icon name="image" /> Gambar Struk (WA)</button><button onClick={() => handlePrint(selectedTx)} className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg active:scale-95 text-sm flex items-center justify-center gap-2"><Icon name="print" /> Cetak Struk</button></div>
+                                <div className="tx-detail-row"><span className="tx-detail-label">Metode</span><span className="tx-detail-value">{selectedTx.paymentMethod === 'qris' ? 'QRIS' : selectedTx.paymentMethod === 'transfer' ? 'Transfer' : 'Tunai'}</span></div>
+                                {(selectedTx.paymentMethod === 'transfer' || selectedTx.paymentMethod === 'qris') ? (<>
+                                    <div className="tx-detail-row">
+                                        <span className="tx-detail-label">Dibayar ke</span>
+                                        <span className="tx-detail-value whitespace-pre-wrap">{settings.transferInfo || '-'}</span>
+                                    </div>
+                                    <div className="tx-detail-row">
+                                        <span className="tx-detail-label">Catatan</span>
+                                        <span className="tx-detail-value">{selectedTx.paymentNote || '-'}</span>
+                                    </div>
+                                    <div className="tx-detail-row">
+                                        <span className="tx-detail-label">Bukti transfer</span>
+                                        {selectedTx.paymentProofImage ? (
+                                            <button onClick={() => setProofImageModal(selectedTx.paymentProofImage)} className="flex items-center gap-1 text-teal-600 font-bold text-sm mt-0.5">
+                                                Lihat dokumen <Icon name="arrow-up-right-from-square" className="text-xs" />
+                                            </button>
+                                        ) : (
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                <span className="tx-detail-value text-slate-400 italic">Belum ada bukti</span>
+                                                <input ref={historyProofInputRef} type="file" accept="image/*" className="hidden" onChange={handleHistoryProofUpload} />
+                                                <button onClick={() => historyProofInputRef.current && historyProofInputRef.current.click()} disabled={uploadingProof} className="text-[10px] text-teal-600 font-bold border border-teal-200 px-2 py-0.5 rounded-lg hover:bg-teal-50">
+                                                    {uploadingProof ? 'Menyimpan...' : '+ Upload'}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {showDeleteProofConfirm && (
+                                        <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-xl">
+                                            <p className="text-xs font-bold text-red-700 mb-2">Yakin ingin menghapus bukti pembayaran ini?</p>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => setShowDeleteProofConfirm(false)} className="flex-1 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50">Batal</button>
+                                                <button onClick={handleDeleteProof} disabled={deletingProof} className="flex-1 py-1.5 rounded-lg bg-red-500 text-white text-xs font-bold hover:bg-red-600 disabled:opacity-50">{deletingProof ? 'Menghapus...' : 'Ya, Hapus'}</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>) : (() => {
+                                    const totalReturnedValue = (selectedTx.items || []).reduce((acc, item) => acc + (item.price * (item.returnedQty || 0)), 0);
+                                    const totalSetelahRetur = (selectedTx.total || 0) - totalReturnedValue;
+                                    const hasRetur = totalReturnedValue > 0;
+                                    const kembalianBaru = hasRetur ? (selectedTx.pay || 0) - totalSetelahRetur : (selectedTx.change || 0);
+                                    return (
+                                        <>
+                                            <div className="tx-detail-row">
+                                                <span className="tx-detail-label">Total dibayar</span>
+                                                <span className="tx-detail-value font-bold">{formatRupiah(selectedTx.pay)}</span>
+                                            </div>
+                                            {hasRetur && (
+                                                <div className="tx-detail-row">
+                                                    <span className="tx-detail-label">Total setelah retur</span>
+                                                    <span className="tx-detail-value font-bold text-orange-600">{formatRupiah(totalSetelahRetur)}</span>
+                                                </div>
+                                            )}
+                                            <div className="tx-detail-row">
+                                                <span className="tx-detail-label">Kembalian{hasRetur ? ' (setelah retur)' : ''}</span>
+                                                <span className="tx-detail-value font-bold text-green-600">{formatRupiah(kembalianBaru)}</span>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
                             </div>
+
+                            {/* ===== PELUNASAN ===== */}
+                            <div className="bg-slate-100" style={{height:'8px'}}></div>
+                            <div className="px-4 pt-4 pb-2 bg-white">
+                                <p className="tx-section-title">Pelunasan</p>
+                                <div className="tx-detail-row"><span className="tx-detail-label">Tgl pelunasan</span><span className="tx-detail-value">{(() => { const d = selectedTx.date?.toDate ? selectedTx.date.toDate() : new Date(selectedTx.date); const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']; return `${d.getFullYear()} ${months[d.getMonth()]} ${d.getDate()}`; })()}</span></div>
+                                <div className="tx-detail-row"><span className="tx-detail-label">Dibayar ke</span><span className="tx-detail-value">{selectedTx.paymentMethod === 'qris' ? 'QRIS' : selectedTx.paymentMethod === 'transfer' ? 'Transfer' : 'Tunai'}</span></div>
+                                <div className="tx-detail-row"><span className="tx-detail-label">Catatan</span><span className="tx-detail-value">-</span></div>
+                            </div>
+
+                            {/* ===== DAFTAR BARANG ===== */}
+                            <div className="bg-slate-100" style={{height:'8px'}}></div>
+                            <div className="px-4 pt-4 pb-2 bg-white">
+                                <p className="tx-section-title">Daftar Barang</p>
+                                <div className="tx-items-table-header">
+                                    <span className="w-5 flex-shrink-0"></span>
+                                    <span className="flex-1">Barang</span>
+                                    <span className="w-10 text-center">Jmlh</span>
+                                    <span className="w-20 text-right">Harga</span>
+                                </div>
+                                {(() => {
+                                    return selectedTx.items.map((item, idx) => {
+                                        const returnedQty = item.returnedQty || 0;
+                                        const isFullyReturned = returnedQty >= item.cartQty;
+                                        const ri = item.racikanInfo;
+                                        return (
+                                            <div key={idx} className="tx-items-row">
+                                                <div className="w-5 flex-shrink-0 pt-0.5"><span className="text-xs text-slate-700">{idx + 1}</span></div>
+                                                <div className="flex-1 min-w-0 pr-2">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        <p className="text-sm font-bold text-slate-800">{item.name}</p>
+                                                        {item.isRacikanGroup && <span className="text-[8px] font-black bg-teal-600 text-white px-1 py-0.5 rounded flex-shrink-0">R/</span>}
+                                                    </div>
+                                                    <p className="text-[11px] text-slate-700 mt-0.5">{item.cartQty} x {formatRupiah(item.price)}</p>
+                                                    {item.isRacikanGroup && ri && (ri.dokter || ri.pasien) && (<button onClick={() => setRacikanInfoModal(item)} className="mt-1.5 flex items-center gap-1 text-teal-600 text-[10px] font-bold bg-teal-50 hover:bg-teal-100 px-2 py-1 rounded-lg transition-colors"><Icon name="circle-info" className="text-[10px]" /> Info Pasien / Dokter</button>)}
+                                                    {selectedTx.status !== 'returned' && !isFullyReturned && (
+                                                        <button onClick={() => { if (!canReturOldTransaction(selectedTx)) { showToast('Hanya Owner atau akun yang diizinkan yang bisa retur transaksi kemarin & sebelumnya', 'error'); return; } openReturModal(selectedTx, item, idx); }} className={`mt-1.5 border text-[10px] font-bold px-2 py-1 rounded-lg transition-colors ${canReturOldTransaction(selectedTx) ? 'bg-white border-red-200 text-red-500 hover:bg-red-50' : 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'}`}>
+                                                            {canReturOldTransaction(selectedTx) ? 'Retur Item' : <span className="flex items-center gap-1"><Icon name="lock" className="text-[9px]" /> Retur (Terkunci)</span>}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="w-10 flex-shrink-0 text-center">
+                                                    <p className="text-sm font-bold text-slate-800">{item.cartQty}</p>
+                                                </div>
+                                                <div className="w-20 text-right flex-shrink-0">
+                                                    <p className="text-sm font-bold text-slate-800">{(item.cartQty * item.price).toLocaleString('id-ID')}</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    });
+                                })()}
+                                {(() => {
+                                    const subtotalTx = selectedTx.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * item.cartQty), 0);
+                                    const diskonTxRp = subtotalTx - selectedTx.total;
+                                    const discountedItems = selectedTx.items.filter(i => i.discount && i.discount.value > 0);
+                                    const uniqTypes = [...new Set(discountedItems.map(i => i.discount.type))];
+                                    const uniqValues = [...new Set(discountedItems.map(i => i.discount.value))];
+                                    let diskonLabel = 'Diskon';
+                                    if (discountedItems.length > 0 && uniqTypes.length === 1) {
+                                        if (uniqTypes[0] === '%') { diskonLabel = uniqValues.length === 1 ? ('Diskon ' + uniqValues[0] + '%') : 'Diskon (%)'; }
+                                        else { diskonLabel = uniqValues.length === 1 ? ('Diskon ' + formatRupiah(uniqValues[0])) : 'Diskon (Rp)'; }
+                                    }
+                                    // Hitung nilai retur dan total setelah retur
+                                    const totalReturnedValue = selectedTx.items.reduce((acc, item) => acc + (item.price * (item.returnedQty || 0)), 0);
+                                    const totalSetelahRetur = selectedTx.total - totalReturnedValue;
+                                    const hasRetur = totalReturnedValue > 0;
+                                    return (
+                                        <div className="mt-1 pt-1">
+                                            <div className="flex justify-between text-sm py-1.5">
+                                                <span className="text-slate-800">Subtotal (DPP+PPN)</span>
+                                                <span className="font-medium text-slate-800">{subtotalTx.toLocaleString('id-ID')}</span>
+                                            </div>
+                                            <div className="flex justify-between text-sm py-1.5" style={{borderBottom:'1.5px solid #0f172a'}}>
+                                                <span className={diskonTxRp > 0 ? 'text-red-500 font-medium' : 'text-slate-800'}>{diskonLabel}</span>
+                                                <span className={diskonTxRp > 0 ? 'font-medium text-red-500' : 'font-medium text-slate-800'}>{diskonTxRp > 0 ? diskonTxRp.toLocaleString('id-ID') : '0'}</span>
+                                            </div>
+                                            <div className="flex justify-between text-sm py-2 font-bold">
+                                                <span className="text-slate-800">Total</span>
+                                                <span className="text-slate-900">{selectedTx.total.toLocaleString('id-ID')}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+
+                            {/* ===== RETUR SECTION ===== */}
+                            {(selectedTx.status === 'returned' || selectedTx.status === 'partial' || selectedTx.returnedAt) && (() => {
+                                const returItems = selectedTx.items.filter(item => (item.returnedQty || 0) > 0);
+                                const totalRetur = returItems.reduce((acc, item) => acc + (item.price * (item.returnedQty || 0)), 0);
+                                const totalDikembalikan = selectedTx.returTotalDikembalikan !== undefined ? selectedTx.returTotalDikembalikan : totalRetur;
+                                const selisihPengembalian = totalDikembalikan - totalRetur;
+                                const formatReturDate = () => {
+                                    if (!selectedTx.returnedAt) return '-';
+                                    const d = selectedTx.returnedAt?.toDate ? selectedTx.returnedAt.toDate() : new Date(selectedTx.returnedAt);
+                                    const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+                                    return `${d.getFullYear()} ${months[d.getMonth()]} ${d.getDate()}, ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} WIB`;
+                                };
+                                const shortId = selectedTx.id ? selectedTx.id.slice(-10).toUpperCase() : '-';
+                                const noNotaRetur = `${shortId}/R1`;
+                                const returPayLabel = selectedTx.returPaymentMethod === 'qris' ? 'QRIS' : selectedTx.returPaymentMethod === 'transfer' ? 'Transfer' : selectedTx.returPaymentMethod === 'tunai' ? 'Tunai' : '-';
+                                return (
+                                    <>
+                                        <div className="bg-slate-100" style={{height:'8px'}}></div>
+                                        <div className="px-4 pt-4 pb-4 bg-white">
+                                            <p className="tx-section-title">Retur</p>
+                                            {selectedTx.returnedAt && (
+                                                <p className="text-xs text-slate-700 mb-3 leading-relaxed">
+                                                    {formatReturDate()} <span className="text-slate-800 font-semibold">oleh {selectedTx.returByName || selectedTx.cashierName || 'Kasir'}</span>
+                                                </p>
+                                            )}
+
+                                            {/* No. Nota Retur */}
+                                            <div className="tx-detail-row">
+                                                <span className="tx-detail-label">No. Nota retur</span>
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="tx-detail-value font-bold">{noNotaRetur}</span>
+                                                    <button
+                                                        onClick={() => handlePrint && handlePrint({...selectedTx, isReturnPrint: true})}
+                                                        className="text-xs font-bold text-sky-500 hover:text-sky-600 transition-colors active:scale-95"
+                                                    >Cetak</button>
+                                                </div>
+                                            </div>
+
+                                            {/* Grid Metode + Alasan */}
+                                            <div className="grid grid-cols-2 gap-x-4 py-3 border-b border-slate-100">
+                                                <div>
+                                                    <p className="text-[11px] text-slate-700 font-medium mb-1">Metode pembayaran</p>
+                                                    <p className="text-sm font-bold text-slate-800">{returPayLabel}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[11px] text-slate-700 font-medium mb-1">Alasan retur</p>
+                                                    <p className="text-sm font-bold text-slate-800">{selectedTx.returAlasan || '-'}</p>
+                                                </div>
+                                            </div>
+
+                                            {/* Items table */}
+                                            {returItems.length > 0 && (
+                                                <>
+                                                    <div className="tx-items-table-header mt-3">
+                                                        <span className="w-5 flex-shrink-0"></span>
+                                                        <span className="flex-1">Barang</span>
+                                                        <span className="w-10 text-center">Jmlh</span>
+                                                        <span className="w-20 text-right">Harga</span>
+                                                    </div>
+                                                    {returItems.map((item, idx) => (
+                                                        <div key={idx} className="tx-items-row">
+                                                            <div className="w-5 flex-shrink-0 pt-0.5"><span className="text-xs text-slate-700">{idx+1}</span></div>
+                                                            <div className="flex-1 min-w-0 pr-2">
+                                                                <p className="text-sm font-bold text-slate-800">{item.name}</p>
+                                                                <p className="text-[11px] text-slate-700 mt-0.5">{item.returnedQty} x {formatRupiah(item.price)}/{item.unit || 'pcs'}</p>
+                                                            </div>
+                                                            <div className="w-10 flex-shrink-0 text-center">
+                                                                <p className="text-sm font-bold text-slate-800">{item.returnedQty}</p>
+                                                            </div>
+                                                            <div className="w-20 text-right flex-shrink-0">
+                                                                <p className="text-sm font-bold text-slate-800">{(item.returnedQty * item.price).toLocaleString('id-ID')}</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </>
+                                            )}
+
+                                            {/* Summary */}
+                                            <div className="mt-3 pt-1 border-t border-slate-200">
+                                                <div className="flex justify-between text-sm py-1.5 border-b border-slate-100">
+                                                    <span className="text-slate-800">Total retur</span>
+                                                    <span className="font-medium text-slate-800">{totalRetur.toLocaleString('id-ID')}</span>
+                                                </div>
+                                                <div className="flex justify-between text-sm py-1.5 border-b border-slate-100">
+                                                    <span className="text-slate-800">Total yang dikembalikan</span>
+                                                    <span className="font-medium text-slate-800">{totalDikembalikan.toLocaleString('id-ID')}</span>
+                                                </div>
+                                                <div className="flex justify-between text-sm py-2 font-bold">
+                                                    <span className="text-slate-800">Selisih pengembalian</span>
+                                                    <span className={selisihPengembalian < 0 ? 'text-red-600' : selisihPengembalian > 0 ? 'text-green-600' : 'text-slate-900'}>{selisihPengembalian.toLocaleString('id-ID')}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+
                         </div>
                     )}
                     {/* ===== RACIKAN INFO MODAL ===== */}
@@ -9959,15 +10483,15 @@
                                             )}
                                             {ri.catatan && (
                                                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Catatan</p>
-                                                    <p className="text-sm text-slate-700">{ri.catatan}</p>
+                                                    <p className="text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">Catatan</p>
+                                                    <p className="text-sm text-slate-800">{ri.catatan}</p>
                                                 </div>
                                             )}
                                         </div>
                                         {/* Bahan Racikan */}
                                         {bahan.length > 0 && (
                                             <div className="px-5 pb-5">
-                                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Komposisi Bahan ({bahan.length} item)</p>
+                                                <p className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Komposisi Bahan ({bahan.length} item)</p>
                                                 <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
                                                     {bahan.map((b, i) => (
                                                         <div key={i} className="flex items-center justify-between px-3 py-2.5 bg-white">
@@ -9986,6 +10510,253 @@
                             </div>
                         );
                     })()}
+
+                    {/* ===== PROOF IMAGE LIGHTBOX ===== */}
+                    {proofImageModal && (
+                        <div className="fixed inset-0 z-[200] bg-black flex flex-col" onClick={() => setProofImageModal(null)}>
+                            <div className="flex items-center justify-between px-4 py-3">
+                                <span className="text-white font-bold text-sm">Bukti Pembayaran</span>
+                                <button onClick={() => setProofImageModal(null)} className="text-white text-xl w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/20">
+                                    <Icon name="xmark" />
+                                </button>
+                            </div>
+                            <div className="flex-1 flex items-center justify-center p-4" onClick={e => e.stopPropagation()}>
+                                <img src={proofImageModal} alt="Bukti Pembayaran" className="max-w-full max-h-full object-contain rounded-xl" style={{maxHeight:'80vh'}} />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ===== EDIT DETAIL TRANSFER SUBPAGE ===== */}
+                    {showEditTransferPage && selectedTx && (
+                        <div className="fixed inset-0 z-[150] bg-white flex flex-col slide-in-right">
+                            <div className="sticky top-0 z-[160] bg-white border-b border-slate-200 flex items-center px-2" style={{minHeight:'54px'}}>
+                                <button onClick={() => setShowEditTransferPage(false)} className="flex items-center justify-center text-sky-500 flex-shrink-0 active:scale-90 transition-transform" style={{width:'40px',height:'54px'}}>
+                                    <Icon name="arrow-left" className="text-xl" />
+                                </button>
+                                <h2 className="flex-1 text-base font-semibold text-slate-800 text-center">Edit detail transfer</h2>
+                                <div style={{width:'40px'}}></div>
+                            </div>
+                            <div className="flex-1 overflow-y-auto px-4 pt-6 pb-10">
+                                <div className="mb-6">
+                                    <p className="text-sm font-bold text-slate-800 mb-2">Keterangan</p>
+                                    <textarea
+                                        value={editTransferForm.keterangan}
+                                        onChange={e => setEditTransferForm(prev => ({ ...prev, keterangan: e.target.value }))}
+                                        placeholder="Contoh: dari rekening BCA 800-098-765-432-1"
+                                        rows={4}
+                                        className="w-full border border-slate-300 rounded-lg p-3 text-sm text-slate-800 outline-none focus:border-teal-500 resize-none"
+                                    />
+                                </div>
+                                <div className="mb-8">
+                                    <p className="text-sm font-bold text-slate-800 mb-3">Bukti transfer</p>
+                                    <input ref={editTransferProofRef} type="file" accept="image/*" className="hidden" onChange={handleEditTransferProof} />
+                                    {editTransferForm.proofImage ? (
+                                        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                                            <button onClick={() => setProofImageModal(editTransferForm.proofImage)} className="flex items-center gap-2 text-teal-600 font-bold text-sm">
+                                                <Icon name="cloud-arrow-up" /> Bukti pembayaran
+                                            </button>
+                                            <div className="flex items-center gap-2">
+                                                <button onClick={() => setEditTransferForm(prev => ({ ...prev, proofImage: null, proofChanged: true }))} className="text-slate-400 hover:text-red-500 transition-colors"><Icon name="xmark" /></button>
+                                                <button onClick={() => editTransferProofRef.current && editTransferProofRef.current.click()} className="px-4 py-1.5 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-50">Ganti</button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <button onClick={() => editTransferProofRef.current && editTransferProofRef.current.click()} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-sm font-bold text-slate-400 hover:border-teal-400 hover:text-teal-500 hover:bg-teal-50 transition-all flex items-center justify-center gap-2">
+                                            <Icon name="cloud-arrow-up" /> Upload bukti transfer
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="flex justify-end">
+                                    <button onClick={handleSaveEditTransfer} disabled={uploadingProof} className="px-8 py-3 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl shadow active:scale-95 transition-all disabled:opacity-50">
+                                        {uploadingProof ? 'Menyimpan...' : 'Simpan'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ===== RETUR STEP 1: Retur Penjualan ===== */}
+                    {returStep === 'step1' && selectedTx && (
+                        <div className="fixed inset-0 z-[200] bg-white flex flex-col">
+                            {/* Header */}
+                            <div className="sticky top-0 z-[210] bg-white border-b border-slate-200 flex items-center px-2" style={{minHeight:'54px'}}>
+                                <button onClick={() => setReturStep(null)} style={{width:'40px',height:'54px'}} className="flex items-center justify-center text-slate-500 flex-shrink-0 active:scale-90 transition-transform">
+                                    <Icon name="xmark" className="text-lg" />
+                                </button>
+                                <h2 className="flex-1 text-sm font-semibold text-slate-700 text-center">Riwayat #{selectedTx.id?.slice(-10).toUpperCase()}</h2>
+                                <div style={{width:'40px'}} />
+                            </div>
+                            {/* Body */}
+                            <div className="flex-1 overflow-y-auto px-4 pt-6 pb-32">
+                                <h1 className="text-3xl font-black text-slate-900 mb-7">Retur penjualan</h1>
+                                {/* Toggle: Retur dengan detail batch */}
+                                <div className="flex items-center justify-between py-4 border-b border-slate-200 mb-2">
+                                    <span className="text-sm text-slate-700">Retur dengan detail batch</span>
+                                    <div onClick={() => setReturWithBatch(v => !v)} className="relative cursor-pointer flex-shrink-0" style={{width:'51px',height:'31px'}}>
+                                        <div className={`absolute inset-0 rounded-full transition-colors ${returWithBatch ? 'bg-teal-500' : 'bg-slate-200'}`} />
+                                        {!returWithBatch && (
+                                            <div className="absolute inset-0 flex items-center justify-center pr-1">
+                                                <Icon name="xmark" className="text-slate-400 text-sm" />
+                                            </div>
+                                        )}
+                                        <div className={`absolute top-0.5 w-7 h-7 bg-white rounded-full shadow-md transition-all duration-200 ${returWithBatch ? 'left-5' : 'left-0.5'}`} />
+                                    </div>
+                                </div>
+                                {/* Header tabel */}
+                                <div className="flex items-center pb-3 border-b-2 border-slate-200">
+                                    <div className="w-8 flex-shrink-0">
+                                        <div onClick={() => {
+                                            const allChecked = returItemsState.every(i => i.checked);
+                                            setReturItemsState(prev => prev.map(i => ({...i, checked: !allChecked})));
+                                        }} className={`w-5 h-5 border-2 rounded cursor-pointer flex items-center justify-center ${returItemsState.length > 0 && returItemsState.every(i=>i.checked) ? 'bg-teal-500 border-teal-500' : 'border-slate-300 bg-white'}`}>
+                                            {returItemsState.length > 0 && returItemsState.every(i=>i.checked) && <Icon name="check" className="text-white" style={{fontSize:'9px'}} />}
+                                        </div>
+                                    </div>
+                                    <span className="flex-1 text-sm font-bold text-slate-700">Barang</span>
+                                    <span className="text-sm font-bold text-slate-700">Jumlah diretur</span>
+                                </div>
+                                {/* Daftar item yang bisa diretur */}
+                                {returItemsState.map((item, idx) => (
+                                    <div key={idx} className="flex items-center py-4 border-b border-slate-100">
+                                        <div className="w-8 flex-shrink-0">
+                                            <div onClick={() => {
+                                                const next = [...returItemsState];
+                                                next[idx] = {...next[idx], checked: !next[idx].checked};
+                                                setReturItemsState(next);
+                                            }} className={`w-5 h-5 border-2 rounded cursor-pointer flex items-center justify-center ${item.checked ? 'bg-teal-500 border-teal-500' : 'border-slate-300 bg-white'}`}>
+                                                {item.checked && <Icon name="check" className="text-white" style={{fontSize:'9px'}} />}
+                                            </div>
+                                        </div>
+                                        <div className="flex-1 min-w-0 pr-3">
+                                            <p className="text-sm font-bold text-slate-800 leading-tight">{item.name}</p>
+                                            {item.isRacikanGroup && <span className="text-[9px] font-black bg-teal-600 text-white px-1 py-0.5 rounded">R/</span>}
+                                        </div>
+                                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                                            <input type="number" value={item.returQty} min={1} max={item.maxRetur}
+                                                onChange={e => {
+                                                    const v = Math.min(item.maxRetur, Math.max(1, parseInt(e.target.value) || 1));
+                                                    const next = [...returItemsState];
+                                                    next[idx] = {...next[idx], returQty: v};
+                                                    setReturItemsState(next);
+                                                }}
+                                                className="w-14 border border-slate-300 rounded-lg px-2 py-1.5 text-sm text-center font-bold text-slate-800 outline-none focus:border-teal-400"
+                                            />
+                                            <span className="text-sm text-slate-500">/ {item.maxRetur} {item.selectedUnit || item.unit || 'pcs'}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                                {/* Alasan Retur */}
+                                <div className="mt-7">
+                                    <p className="text-sm font-bold text-slate-700 mb-2">Alasan retur <span className="text-red-500">*</span></p>
+                                    <textarea value={returAlasan} onChange={e => setReturAlasan(e.target.value)} rows={4}
+                                        className={`w-full border rounded-xl px-3 py-3 text-sm outline-none focus:border-teal-400 resize-none text-slate-700 placeholder:text-slate-300 transition-colors ${!returAlasan.trim() ? 'border-slate-200' : 'border-teal-400'}`}
+                                        placeholder="Tulis alasan retur..." />
+                                </div>
+                            </div>
+                            {/* Tombol Lanjut (fixed bottom) */}
+                            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-3 z-[220]">
+                                <button onClick={handleReturLanjut}
+                                    className="w-full py-3.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-base active:scale-95 transition-all shadow-lg">
+                                    Lanjut
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ===== RETUR STEP 2: Pilih Metode Pembayaran ===== */}
+                    {returStep === 'step2' && selectedTx && (
+                        <div className="fixed inset-0 z-[200] bg-white flex flex-col">
+                            {/* Header */}
+                            <div className="sticky top-0 z-[210] bg-white border-b border-slate-200 flex items-center px-2" style={{minHeight:'54px'}}>
+                                <button onClick={() => setReturStep('step1')} style={{width:'40px',height:'54px'}} className="flex items-center justify-center text-sky-500 flex-shrink-0 active:scale-90 transition-transform">
+                                    <Icon name="arrow-left" className="text-xl" />
+                                </button>
+                                <div className="flex-1" />
+                                <button onClick={handleProcessReturNew} disabled={processingReturNew}
+                                    className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-bold text-sm active:scale-95 transition-all mr-1">
+                                    {processingReturNew ? 'Memproses...' : 'Lanjut'}
+                                </button>
+                            </div>
+                            {/* Body */}
+                            <div className="flex-1 overflow-y-auto px-4 pt-6 pb-12">
+                                <h1 className="text-3xl font-black text-slate-900 mb-8 leading-tight">Pilih metode<br/>pembayaran</h1>
+                                {(() => {
+                                    const selItems = returItemsState.filter(i => i.checked);
+                                    const totalRetur = selItems.reduce((acc, i) => acc + (i.price * i.returQty), 0);
+                                    const totalKembali = parseInt(returTotalKembali) || 0;
+                                    const selisih = totalKembali - totalRetur;
+                                    return (
+                                        <>
+                                            <div className="mb-6">
+                                                <p className="text-sm font-bold text-slate-600 mb-1">Total retur</p>
+                                                <p className="text-4xl font-black text-slate-900">Rp{totalRetur.toLocaleString('id-ID')}</p>
+                                            </div>
+                                            <div className="mb-6">
+                                                <p className="text-sm font-bold text-slate-600 mb-0.5">Selisih retur</p>
+                                                <p className="text-base font-bold text-slate-700">
+                                                    {selisih === 0 ? 'Rp-' : `Rp${selisih > 0 ? '+' : ''}${selisih.toLocaleString('id-ID')}`}
+                                                </p>
+                                            </div>
+                                            <div className="mb-2">
+                                                <p className="text-sm font-bold text-slate-600 mb-2">Total dikembalikan</p>
+                                                <div className="flex items-center border border-slate-300 rounded-xl px-3 py-2.5 focus-within:border-teal-400 transition-colors bg-white">
+                                                    <span className="text-sm font-bold text-slate-500 mr-2 flex-shrink-0">Rp</span>
+                                                    <input type="number" value={returTotalKembali}
+                                                        onChange={e => setReturTotalKembali(e.target.value)}
+                                                        className="flex-1 outline-none text-sm font-bold text-slate-800 bg-transparent" placeholder="0" />
+                                                </div>
+                                                <p className="text-xs text-slate-400 mt-1.5">Selisih pengembalian akan dicatat sebagai selisih pada transaksimu.</p>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
+                                {/* Metode Pembayaran */}
+                                <div className="mt-7 mb-6">
+                                    <p className="text-sm font-bold text-slate-700 mb-2">Metode pembayaran</p>
+                                    <div className="border-t border-slate-200">
+                                        {/* Tunai */}
+                                        <div onClick={() => setReturPayMethod('tunai')} className="flex items-center gap-3 py-4 border-b border-slate-200 cursor-pointer active:bg-slate-50">
+                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${returPayMethod === 'tunai' ? 'border-teal-500' : 'border-slate-300'}`}>
+                                                {returPayMethod === 'tunai' && <div className="w-2.5 h-2.5 rounded-full bg-teal-500" />}
+                                            </div>
+                                            <span className="text-sm font-bold text-slate-800">Tunai</span>
+                                        </div>
+                                        {/* Transfer/Bank */}
+                                        {settings.transferInfo && (
+                                            <div onClick={() => setReturPayMethod('transfer')} className="flex items-center gap-3 py-4 border-b border-slate-200 cursor-pointer active:bg-slate-50">
+                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${returPayMethod === 'transfer' ? 'border-teal-500' : 'border-slate-300'}`}>
+                                                    {returPayMethod === 'transfer' && <div className="w-2.5 h-2.5 rounded-full bg-teal-500" />}
+                                                </div>
+                                                <div>
+                                                    {settings.transferInfo.trim().split('\n').map((line, li) => (
+                                                        <p key={li} className={li === 0 ? 'text-sm font-bold text-slate-800' : 'text-xs text-slate-500'}>{line.trim()}</p>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {/* QRIS */}
+                                        {settings.qrisImageUrl && (
+                                            <div onClick={() => setReturPayMethod('qris')} className="flex items-center gap-3 py-4 border-b border-slate-200 cursor-pointer active:bg-slate-50">
+                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${returPayMethod === 'qris' ? 'border-teal-500' : 'border-slate-300'}`}>
+                                                    {returPayMethod === 'qris' && <div className="w-2.5 h-2.5 rounded-full bg-teal-500" />}
+                                                </div>
+                                                <span className="text-sm font-bold text-slate-800">QRIS</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                {/* Catatan Pembayaran */}
+                                <div>
+                                    <p className="text-sm font-bold text-slate-700 mb-2">
+                                        Catatan pembayaran <span className="font-normal text-slate-400">(Opsional)</span>
+                                    </p>
+                                    <textarea value={returNote} onChange={e => setReturNote(e.target.value)} rows={4}
+                                        className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm outline-none focus:border-teal-400 resize-none text-slate-700 placeholder:text-slate-300"
+                                        placeholder="Tulis catatan pembayaran..." />
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     <ConfirmModal isOpen={returModal.show} title="Retur Barang" message={`Berapa banyak "${returModal.item?.name}" yang ingin diretur? Stok akan kembali ke toko asal.`} onConfirm={handleProcessRetur} onCancel={() => setReturModal({ show: false, tx: null, item: null, index: -1 })} confirmText={processingRetur ? "Memproses..." : "Konfirmasi Retur"}> {returModal.item && (<div className="bg-slate-50 p-4 rounded-xl border border-slate-200"><div className="flex items-center justify-between"><button onClick={() => setQtyToRetur(Math.max(1, qtyToRetur - 1))} className="w-10 h-10 bg-white border border-slate-300 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100"><Icon name="minus" /></button><div className="flex flex-col items-center"><span className="text-2xl font-black text-slate-800">{qtyToRetur}</span><span className="text-[10px] text-slate-400 font-bold uppercase">Maks: {returModal.max}</span></div><button onClick={() => setQtyToRetur(Math.min(returModal.max, qtyToRetur + 1))} className="w-10 h-10 bg-white border border-slate-300 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100"><Icon name="plus" /></button></div><div className="mt-3 text-center"><p className="text-xs text-slate-500">Nilai Pengembalian:</p><p className="text-lg font-bold text-red-600">{formatRupiah(qtyToRetur * returModal.item.price)}</p></div></div>)}</ConfirmModal>
                 </div>
@@ -17738,8 +18509,20 @@
                                      return headers.map((h, i) => <p key={i} className="text-sm text-gray-600">{h}</p>);
                                 })()}
                             </div> 
-                            <div className="border-b-2 border-dashed border-gray-300 my-2"></div> <div className="flex justify-between text-xs mb-1"> <span>Tgl: {new Date(receiptToPrint.date.seconds ? receiptToPrint.date.toDate() : receiptToPrint.date).toLocaleString('id-ID')}</span> </div> <div className="flex justify-between text-xs mb-2"> <span>Ref: {receiptToPrint.id ? receiptToPrint.id.slice(-8).toUpperCase() : '-'}</span> <span>Kasir: {receiptToPrint.cashierName || 'Admin'}</span> </div> <div className="border-b-2 border-dashed border-gray-300 my-2"></div> <div className="space-y-2 mb-4"> {(() => { let rcIdx = 0; return receiptToPrint.items.map((item, idx) => { const validQty = item.cartQty - (item.returnedQty || 0); if (validQty <= 0) return null; let displayName = item.name; if (item.isRacikanGroup) { rcIdx++; displayName = `Racikan ${rcIdx}`; } return ( <div key={idx} className="text-sm"> <div className="font-bold">{displayName}</div> <div className="flex justify-between"> <span>{validQty} x {formatRupiah(item.price)}</span> <span>{formatRupiah(validQty * item.price)}</span> </div> </div> ); }); })()} </div> <div className="border-b-2 border-dashed border-gray-300 my-2"></div> {(() => {
-  const subtotalR = receiptToPrint.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * (item.cartQty - (item.returnedQty || 0))), 0);
+                            <div className="border-b-2 border-dashed border-gray-300 my-2"></div>
+                            {(() => {
+                                const rd = receiptToPrint.date.seconds ? receiptToPrint.date.toDate() : new Date(receiptToPrint.date);
+                                const hariReceipt = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][rd.getDay()];
+                                return (
+                                    <>
+                                        <div className="text-xs mb-1"><span>Tgl: {hariReceipt}, {rd.toLocaleDateString('id-ID')} {rd.toLocaleTimeString('id-ID')}</span></div>
+                                        <div className="text-xs mb-1"><span>Dilayani oleh: {receiptToPrint.cashierName || 'Kasir'}</span></div>
+                                        <div className="flex justify-between text-xs mb-2"><span>Ref: {receiptToPrint.id ? receiptToPrint.id.slice(-8).toUpperCase() : '-'}</span></div>
+                                    </>
+                                );
+                            })()}
+                            <div className="border-b-2 border-dashed border-gray-300 my-2"></div> <div className="space-y-2 mb-4"> {(() => { let rcIdx = 0; return receiptToPrint.items.map((item, idx) => { let displayName = item.name; if (item.isRacikanGroup) { rcIdx++; displayName = `Racikan ${rcIdx}`; } return ( <div key={idx} className="text-sm"> <div className="font-bold">{displayName}</div> <div className="flex justify-between"> <span>{item.cartQty} x {formatRupiah(item.price)}</span> <span>{formatRupiah(item.cartQty * item.price)}</span> </div> </div> ); }); })()} </div> <div className="border-b-2 border-dashed border-gray-300 my-2"></div> {(() => {
+  const subtotalR = receiptToPrint.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * item.cartQty), 0);
   const diskonR = subtotalR - receiptToPrint.total;
   const discountedR = receiptToPrint.items.filter(i => i.discount && i.discount.value > 0);
   const uniqTypesR = [...new Set(discountedR.map(i => i.discount.type))];
@@ -17757,7 +18540,35 @@
     {diskonR > 0 && (<div className="flex justify-between text-sm mb-1"><span>{diskonLabelR}</span><span>- {formatRupiah(diskonR)}</span></div>)}
     <div className="border-t border-dashed border-gray-300 my-1"></div>
   </>);
-})()} <div className="flex justify-between font-bold text-lg mb-1"> <span>TOTAL</span> <span>{formatRupiah(receiptToPrint.total)}</span> </div> {receiptToPrint.pay !== undefined && ( <div className="flex justify-between text-sm"> <span>{receiptToPrint.paymentMethod === 'qris' ? 'QRIS' : receiptToPrint.paymentMethod === 'transfer' ? 'Transfer' : 'Tunai'}</span> <span>{formatRupiah(receiptToPrint.pay)}</span> </div> )} {(!receiptToPrint.paymentMethod || receiptToPrint.paymentMethod === 'tunai') && receiptToPrint.change !== undefined && ( <div className="flex justify-between text-sm"> <span>Kembali</span> <span>{formatRupiah(receiptToPrint.change)}</span> </div> )} <div className="border-b-2 border-dashed border-gray-300 my-4"></div> 
+})()} {(() => {
+  const totalReturnedValueR = (receiptToPrint.items || []).reduce((acc, item) => acc + (item.price * (item.returnedQty || 0)), 0);
+  const hasReturR = totalReturnedValueR > 0;
+  const totalSetelahReturR = (receiptToPrint.total || 0) - totalReturnedValueR;
+  const kembalianReturR = receiptToPrint.change || 0;
+  return (<>
+    <div className="flex justify-between font-bold text-lg mb-1"> <span>TOTAL</span> <span>{formatRupiah(receiptToPrint.total)}</span> </div>
+    {receiptToPrint.pay !== undefined && ( <div className="flex justify-between text-sm"> <span>{receiptToPrint.paymentMethod === 'qris' ? 'QRIS' : receiptToPrint.paymentMethod === 'transfer' ? 'Transfer' : 'Tunai'}</span> <span>{formatRupiah(receiptToPrint.pay)}</span> </div> )}
+    {(!receiptToPrint.paymentMethod || receiptToPrint.paymentMethod === 'tunai') && receiptToPrint.pay !== undefined && ( <div className="flex justify-between text-sm"> <span>Kembalian</span> <span>{formatRupiah(kembalianReturR)}</span> </div> )}
+    {hasReturR && (<>
+      <div className="border-t border-dashed border-gray-300 my-2"></div>
+      <div className="font-bold text-sm mb-1">Retur</div>
+      {(receiptToPrint.items || []).filter(item => (item.returnedQty || 0) > 0).map((item, idx) => (
+        <div key={idx} className="text-sm mb-1">
+          <div>{item.name}</div>
+          <div className="flex justify-between">
+            <span>{item.returnedQty} x {formatRupiah(item.price)}</span>
+            <span>{formatRupiah(item.returnedQty * item.price)}</span>
+          </div>
+        </div>
+      ))}
+      <div className="border-t border-dashed border-gray-300 my-1"></div>
+      <div className="flex justify-between text-sm"><span>Total retur</span><span>{formatRupiah(totalReturnedValueR)}</span></div>
+      <div className="border-t border-dashed border-gray-300 my-1"></div>
+      <div className="flex justify-between text-sm font-bold"><span>Total dikembalikan</span><span>{formatRupiah(receiptToPrint.returTotalDikembalikan !== undefined ? receiptToPrint.returTotalDikembalikan : totalReturnedValueR)}</span></div>
+      <div className="border-t border-dashed border-gray-300 my-1"></div>
+    </>)}
+  </>);
+})()} <div className="border-b-2 border-dashed border-gray-300 my-4"></div> 
                             <div className="text-center text-xs text-gray-500 whitespace-pre-wrap"> 
                                 {/* DYNAMIC FOOTER LOGIC */}
                                 {(() => {
@@ -17765,7 +18576,7 @@
                                      return profile?.footer || settingsData.receiptFooter || "Terima Kasih\nBarang tidak dapat ditukar";
                                 })()}
                             </div> 
-                            {receiptToPrint.status === 'returned' && <div className="mt-4 text-center font-bold text-xl text-red-600 border-2 border-red-600 p-2 transform -rotate-12">TRANSAKSI DIBATALKAN</div>} {receiptToPrint.status === 'partial' && <div className="mt-4 text-center font-bold text-sm text-amber-600">*** ADA RETUR SEBAGIAN ***</div>} 
+                            {receiptToPrint.status === 'returned' && <div className="mt-4 text-center font-bold text-xl text-red-600 border-2 border-red-600 p-2 transform -rotate-12">TRANSAKSI DIBATALKAN</div>} 
                         </div> 
                     </div> )}
 
