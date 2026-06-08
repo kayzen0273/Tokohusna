@@ -6164,6 +6164,7 @@
             const [checkoutModal, setCheckoutModal] = useState(false);
             const [paymentMethod, setPaymentMethod] = useState(''); // '', 'tunai', 'qris', 'transfer'
             const [paymentProofImage, setPaymentProofImage] = useState(null); // base64 bukti bayar
+            const [catatanPembayaran, setCatatanPembayaran] = useState(''); // catatan untuk qris/transfer
             const [cartDiskon, setCartDiskon] = useState('0');
             const [cartDiskonType, setCartDiskonType] = useState('%');
             const [cartBiayaPengiriman, setCartBiayaPengiriman] = useState('0');
@@ -6297,6 +6298,7 @@
                     pay: finalPay,
                     change: finalChange,
                     paymentMethod: paymentMethod || 'tunai',
+                    catatanPembayaran: catatanPembayaran.trim() || '',
                     status: 'success',
                     cashierName: cashierName || 'Kasir',
                     salesName: selectedSales || cashierName || 'Kasir',
@@ -7383,6 +7385,7 @@
                         change: finalChange, 
                         paymentMethod: paymentMethod || 'tunai',
                         paymentProofImage: paymentProofImage || null,
+                        catatanPembayaran: catatanPembayaran.trim() || '',
                         status: 'success', 
                         cashierName: cashierName || user.email || 'Admin',
                         salesName: selectedSales || originalCashierName || cashierName || user.email || 'Admin',
@@ -7454,6 +7457,7 @@
                 setPaymentAmount(''); 
                 setPaymentMethod('');
                 setPaymentProofImage(null);
+                setCatatanPembayaran('');
                 setCartDiskon('0');
                 setCartDiskonType('%');
                 setCartBiayaPengiriman('0');
@@ -7908,7 +7912,7 @@
                         )}
 
                         {/* Tombol Bayar */}
-                        <button onClick={() => { if(readOnly){showToast('Akses terbatas — hubungi owner','error');return;} setPaymentAmount(''); setPaymentMethod(''); setCartPembulatan(0); setCheckoutModal(true); }} disabled={cart.length === 0} className="w-full py-1.5 mt-4 mb-2 bg-teal-700 hover:bg-teal-800 text-white rounded-md font-bold shadow-sm active:scale-95 transition-all disabled:opacity-40 disabled:scale-100 flex items-center justify-center gap-2 text-base">Bayar</button>
+                        <button onClick={() => { if(readOnly){showToast('Akses terbatas — hubungi owner','error');return;} setPaymentAmount(''); setPaymentMethod(''); setCartPembulatan(0); setCatatanPembayaran(''); setPaymentProofImage(null); setCheckoutModal(true); }} disabled={cart.length === 0} className="w-full py-1.5 mt-4 mb-2 bg-teal-700 hover:bg-teal-800 text-white rounded-md font-bold shadow-sm active:scale-95 transition-all disabled:opacity-40 disabled:scale-100 flex items-center justify-center gap-2 text-base">Bayar</button>
 
                         <div className="relative mb-2 mt-3" onMouseDown={e => { if (!e.currentTarget.contains(e.target) || e.target === e.currentTarget) setShowDropdown(false); }}>
                         <div className="flex items-center gap-3"><div className="relative group flex-1"><input ref={searchInputRef} autoFocus type="text" placeholder="Cari barang" className="w-full pl-10 pr-4 py-1.5 rounded-md bg-white border border-slate-200 shadow-soft outline-none transition-all font-bold text-base text-slate-700 placeholder:font-normal placeholder:text-slate-400" style={{'--tw-ring-color':'#19737c'}} onFocus={e=>{e.currentTarget.style.borderColor='#19737c';e.currentTarget.style.boxShadow='0 0 0 2px rgba(17,137,137,0.15)'; if(search) setShowDropdown(true);}} onBlur={e=>{e.currentTarget.style.borderColor='';e.currentTarget.style.boxShadow='';}} value={search} onChange={e => { setSearch(e.target.value); setShowDropdown(e.target.value !== ''); }} /><Icon name="magnifying-glass" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-base group-focus-within:text-teal-500" /></div></div>
@@ -8125,7 +8129,7 @@
                                 </div>
                             </div>
                             <div className="px-0 flex items-center gap-3">
-                            <button onClick={() => { if(readOnly){showToast('Akses terbatas — hubungi owner','error');return;} setPaymentAmount(''); setPaymentMethod(''); setCartPembulatan(0); setCheckoutModal(true); }} disabled={cart.length === 0} className="w-3/4 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-md font-bold shadow-sm active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2">Bayar</button>
+                            <button onClick={() => { if(readOnly){showToast('Akses terbatas — hubungi owner','error');return;} setPaymentAmount(''); setPaymentMethod(''); setCartPembulatan(0); setCatatanPembayaran(''); setPaymentProofImage(null); setCheckoutModal(true); }} disabled={cart.length === 0} className="w-3/4 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-md font-bold shadow-sm active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2">Bayar</button>
                             <button onClick={() => { if(readOnly) return; setCancelModal(true); }} disabled={cart.length === 0 || readOnly} className="flex-shrink-0 flex items-center gap-1.5 text-orange-500 font-bold text-xs disabled:opacity-30 disabled:text-slate-400 active:scale-95 transition-all"><Icon name="trash-can" className="text-base" /><span className="leading-tight">Batalkan<br/>transaksi</span></button>
                             </div>
                         </div>
@@ -8219,6 +8223,10 @@
                                         </button>
                                     )}
                                 </div>
+                                <div className="mb-3 text-left">
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Catatan <span className="font-normal lowercase">(opsional)</span></label>
+                                    <textarea value={catatanPembayaran} onChange={e => setCatatanPembayaran(e.target.value)} className="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-teal-400 outline-none text-sm h-16 transition-colors resize-none" placeholder="Misal: Sudah transfer, no. ref 12345..." />
+                                </div>
                                 <button onClick={handleCheckout} disabled={isProcessing} className="w-full py-3.5 bg-teal-600 text-white rounded-xl font-bold shadow-lg disabled:opacity-50 flex justify-center items-center gap-2">{isProcessing ? <div className="typing-dot bg-white"></div> : <><Icon name="check" /> Konfirmasi Sudah Bayar</>}</button>
                             </div>
                         ) : paymentMethod === 'transfer' ? (
@@ -8245,6 +8253,10 @@
                                             <Icon name="camera" /> Upload / Foto Bukti Pembayaran <span className="text-[10px] font-normal opacity-70">(opsional)</span>
                                         </button>
                                     )}
+                                </div>
+                                <div className="mb-3 text-left">
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Catatan <span className="font-normal lowercase">(opsional)</span></label>
+                                    <textarea value={catatanPembayaran} onChange={e => setCatatanPembayaran(e.target.value)} className="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-teal-400 outline-none text-sm h-16 transition-colors resize-none" placeholder="Misal: Sudah transfer, no. ref 12345..." />
                                 </div>
                                 <button onClick={handleCheckout} disabled={isProcessing} className="w-full py-3.5 bg-teal-600 text-white rounded-xl font-bold shadow-lg disabled:opacity-50 flex justify-center items-center gap-2">{isProcessing ? <div className="typing-dot bg-white"></div> : <><Icon name="check" /> Konfirmasi Sudah Bayar</>}</button>
                             </div>
@@ -9126,7 +9138,7 @@
                 if (!selectedTx) return;
                 setUploadingProof(true);
                 try {
-                    const updates = { paymentNote: editTransferForm.keterangan };
+                    const updates = { catatanPembayaran: editTransferForm.keterangan, paymentNote: editTransferForm.keterangan };
                     if (editTransferForm.proofChanged) updates.paymentProofImage = editTransferForm.proofImage;
                     const txRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions', selectedTx.id);
                     await window.updateDoc(txRef, updates);
@@ -9379,8 +9391,9 @@
             const handleReturLanjut = () => {
                 const selItems = returItemsState.filter(i => i.checked);
                 if (selItems.length === 0) { showToast('Pilih minimal satu barang untuk diretur', 'error'); return; }
+                if (selItems.some(i => i.returQty === '' || i.returQty < 1)) { showToast('Jumlah retur tidak boleh kosong atau 0', 'error'); return; }
                 if (!returAlasan.trim()) { showToast('Alasan retur wajib diisi', 'error'); return; }
-                const total = selItems.reduce((acc, i) => acc + (i.price * i.returQty), 0);
+                const total = selItems.reduce((acc, i) => acc + (i.price * (parseInt(i.returQty) || 1)), 0);
                 setReturPayMethod('tunai');
                 setReturTotalKembali(String(total));
                 setReturNote('');
@@ -10196,7 +10209,7 @@
                                 <div className="flex items-center justify-between mb-1">
                                     <p className="tx-section-title" style={{marginBottom:0}}>Pembayaran</p>
                                     {(selectedTx.paymentMethod === 'transfer' || selectedTx.paymentMethod === 'qris') && (
-                                        <button onClick={() => { setEditTransferForm({ keterangan: selectedTx.paymentNote || '', proofImage: selectedTx.paymentProofImage || null, proofChanged: false }); setShowEditTransferPage(true); }} className="flex items-center gap-1 text-teal-600 text-sm font-bold hover:bg-teal-50 px-2 py-1 rounded-lg transition-colors">
+                                        <button onClick={() => { setEditTransferForm({ keterangan: selectedTx.catatanPembayaran || selectedTx.paymentNote || '', proofImage: selectedTx.paymentProofImage || null, proofChanged: false }); setShowEditTransferPage(true); }} className="flex items-center gap-1 text-teal-600 text-sm font-bold hover:bg-teal-50 px-2 py-1 rounded-lg transition-colors">
                                             <Icon name="pen" className="text-xs" /> Edit
                                         </button>
                                     )}
@@ -10209,7 +10222,7 @@
                                     </div>
                                     <div className="tx-detail-row">
                                         <span className="tx-detail-label">Catatan</span>
-                                        <span className="tx-detail-value">{selectedTx.paymentNote || '-'}</span>
+                                        <span className="tx-detail-value">{selectedTx.catatanPembayaran || selectedTx.paymentNote || '-'}</span>
                                     </div>
                                     <div className="tx-detail-row">
                                         <span className="tx-detail-label">Bukti transfer</span>
@@ -10654,10 +10667,22 @@
                                         <div className="flex items-center gap-1.5 flex-shrink-0">
                                             <input type="number" value={item.returQty} min={1} max={item.maxRetur}
                                                 onChange={e => {
-                                                    const v = Math.min(item.maxRetur, Math.max(1, parseInt(e.target.value) || 1));
+                                                    const raw = e.target.value;
                                                     const next = [...returItemsState];
-                                                    next[idx] = {...next[idx], returQty: v};
+                                                    if (raw === '') {
+                                                        next[idx] = {...next[idx], returQty: ''};
+                                                    } else {
+                                                        const v = Math.min(item.maxRetur, Math.max(1, parseInt(raw) || 1));
+                                                        next[idx] = {...next[idx], returQty: v};
+                                                    }
                                                     setReturItemsState(next);
+                                                }}
+                                                onBlur={() => {
+                                                    if (item.returQty === '' || item.returQty === undefined) {
+                                                        const next = [...returItemsState];
+                                                        next[idx] = {...next[idx], returQty: 1};
+                                                        setReturItemsState(next);
+                                                    }
                                                 }}
                                                 className="w-14 border border-slate-300 rounded-lg px-2 py-1.5 text-sm text-center font-bold text-slate-800 outline-none focus:border-teal-400"
                                             />
