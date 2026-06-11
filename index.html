@@ -4902,31 +4902,33 @@
                             </div>
                         </header>
                      ) : (
-                        <header className="mb-5 flex items-center gap-3 flex-shrink-0">
-                            <button
-                                onClick={() => setPurchaseMainView('faktur')}
-                                className="flex items-center gap-1 px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-all shadow-sm active:scale-95 flex-shrink-0"
-                            >
-                                <Icon name="chevron-left" /> Kembali
-                            </button>
-                            <div className="min-w-0 flex-1">
+                        <header className="mb-5 flex-shrink-0">
+                            <div className="flex items-center justify-between mb-3">
+                                <button
+                                    onClick={() => setPurchaseMainView('faktur')}
+                                    className="flex items-center gap-1 px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+                                >
+                                    <Icon name="chevron-left" /> Kembali
+                                </button>
+                                <button
+                                    onClick={handleExportPBFExcel}
+                                    disabled={exportingPBF || filteredPriceData.length === 0}
+                                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs transition-all shadow-sm active:scale-95 flex-shrink-0 ${exportingPBF || filteredPriceData.length === 0 ? 'bg-slate-50 border border-slate-200 text-slate-300 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200'}`}
+                                    title="Download Excel"
+                                >
+                                    {exportingPBF
+                                        ? <><Icon name="spinner" className="text-xs animate-spin" /> Proses...</>
+                                        : <><Icon name="file-excel" className="text-sm" /> <span className="hidden sm:inline">Excel</span></>
+                                    }
+                                </button>
+                            </div>
+                            <div className="min-w-0">
                                 <h2 className="text-xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
                                     <Icon name="scale-balanced" className="text-teal-600" />
                                     Perbandingan Harga PBF
                                 </h2>
                                 <p className="text-slate-500 text-xs mt-0.5 truncate">Bandingkan harga dari berbagai PBF / supplier</p>
                             </div>
-                            <button
-                                onClick={handleExportPBFExcel}
-                                disabled={exportingPBF || filteredPriceData.length === 0}
-                                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs transition-all shadow-sm active:scale-95 flex-shrink-0 ${exportingPBF || filteredPriceData.length === 0 ? 'bg-slate-50 border border-slate-200 text-slate-300 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200'}`}
-                                title="Download Excel"
-                            >
-                                {exportingPBF
-                                    ? <><Icon name="spinner" className="text-xs animate-spin" /> Proses...</>
-                                    : <><Icon name="file-excel" className="text-sm" /> <span className="hidden sm:inline">Excel</span></>
-                                }
-                            </button>
                         </header>
                      )}
                     {isAllStores && purchaseMainView === 'faktur' && <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-700 font-medium flex items-center gap-2"><Icon name="circle-info" /> Mode Semua Toko — data dari semua toko ditampilkan. Untuk input faktur baru, pilih toko spesifik.</div>}
