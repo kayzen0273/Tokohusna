@@ -4902,33 +4902,31 @@
                             </div>
                         </header>
                      ) : (
-                        <header className="mb-5 flex-shrink-0">
-                            <div className="flex items-center justify-between mb-2">
-                                <button
-                                    onClick={() => setPurchaseMainView('faktur')}
-                                    className="flex items-center gap-1 px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-all shadow-sm active:scale-95 flex-shrink-0"
-                                >
-                                    <Icon name="chevron-left" /> Kembali
-                                </button>
-                                <button
-                                    onClick={handleExportPBFExcel}
-                                    disabled={exportingPBF || filteredPriceData.length === 0}
-                                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs transition-all shadow-sm active:scale-95 flex-shrink-0 ${exportingPBF || filteredPriceData.length === 0 ? 'bg-slate-50 border border-slate-200 text-slate-300 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200'}`}
-                                    title="Download Excel"
-                                >
-                                    {exportingPBF
-                                        ? <><Icon name="spinner" className="text-xs animate-spin" /> Proses...</>
-                                        : <><Icon name="file-excel" className="text-sm" /> <span className="hidden sm:inline">Excel</span></>
-                                    }
-                                </button>
-                            </div>
-                            <div className="min-w-0">
+                        <header className="mb-5 flex items-center gap-3 flex-shrink-0">
+                            <button
+                                onClick={() => setPurchaseMainView('faktur')}
+                                className="flex items-center gap-1 px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-all shadow-sm active:scale-95 flex-shrink-0"
+                            >
+                                <Icon name="chevron-left" /> Kembali
+                            </button>
+                            <div className="min-w-0 flex-1">
                                 <h2 className="text-xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
                                     <Icon name="scale-balanced" className="text-teal-600" />
                                     Perbandingan Harga PBF
                                 </h2>
                                 <p className="text-slate-500 text-xs mt-0.5 truncate">Bandingkan harga dari berbagai PBF / supplier</p>
                             </div>
+                            <button
+                                onClick={handleExportPBFExcel}
+                                disabled={exportingPBF || filteredPriceData.length === 0}
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs transition-all shadow-sm active:scale-95 flex-shrink-0 ${exportingPBF || filteredPriceData.length === 0 ? 'bg-slate-50 border border-slate-200 text-slate-300 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200'}`}
+                                title="Download Excel"
+                            >
+                                {exportingPBF
+                                    ? <><Icon name="spinner" className="text-xs animate-spin" /> Proses...</>
+                                    : <><Icon name="file-excel" className="text-sm" /> <span className="hidden sm:inline">Excel</span></>
+                                }
+                            </button>
                         </header>
                      )}
                     {isAllStores && purchaseMainView === 'faktur' && <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-700 font-medium flex items-center gap-2"><Icon name="circle-info" /> Mode Semua Toko — data dari semua toko ditampilkan. Untuk input faktur baru, pilih toko spesifik.</div>}
@@ -18155,8 +18153,818 @@
         // =================== END TRANSFER BARANG VIEW ===================
 
 
+                const AnalitikView = ({ user, currentProfile }) => {
+                    const [transactions, setTransactions] = useState([]);
+                    const [loading, setLoading] = useState(true);
+                    const [filterMode, setFilterMode] = useState('30d');
+                    const [startDate, setStartDate] = useState('');
+                    const [endDate, setEndDate] = useState('');
+                    const [chartTab, setChartTab] = useState('tren');
+                    const [topMode, setTopMode] = useState('qty');
 
-                // ====== REKAP BARANG TERJUAL VIEW ======
+                    useEffect(() => {
+                        if (!user) return;
+                        setLoading(true);
+                        const q = window.query(
+                            window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions'),
+                            window.orderBy('date', 'desc'),
+                            window.limit(3000)
+                        );
+                        const unsub = window.onSnapshot(q, snap => {
+                            setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                            setLoading(false);
+                        }, () => setLoading(false));
+                        return () => unsub();
+                    }, [user]);
+
+                    const filteredTx = React.useMemo(() => {
+                        const now = new Date();
+                        return transactions.filter(tx => {
+                            if (tx.status === 'returned') return false;
+                            if (currentProfile?.id && currentProfile.id !== 'all_stores' && tx.storeId && tx.storeId !== currentProfile.id) return false;
+                            const txDate = tx.date?.seconds ? new Date(tx.date.seconds * 1000) : new Date(tx.date);
+                            if (filterMode === '7d') { const d = new Date(now); d.setDate(d.getDate() - 6); d.setHours(0,0,0,0); return txDate >= d; }
+                            if (filterMode === '30d') { const d = new Date(now); d.setDate(d.getDate() - 29); d.setHours(0,0,0,0); return txDate >= d; }
+                            if (filterMode === 'this_month') return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
+                            if (filterMode === 'last_month') { const lm = new Date(now.getFullYear(), now.getMonth()-1, 1); const lmEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23,59,59); return txDate >= lm && txDate <= lmEnd; }
+                            if (filterMode === 'custom') { if (!startDate || !endDate) return true; const s = new Date(startDate); s.setHours(0,0,0,0); const e = new Date(endDate); e.setHours(23,59,59,999); return txDate >= s && txDate <= e; }
+                            return true;
+                        });
+                    }, [transactions, filterMode, currentProfile, startDate, endDate]);
+
+                    const analyticsData = React.useMemo(() => {
+                        const dailyMap = {};
+                        const productMap = {};
+                        const hourMap = Array.from({ length: 24 }, (_, h) => ({ hour: h, count: 0, omzet: 0 }));
+                        const paymentMap = {};
+                        let totalOmzet = 0, totalTx = 0;
+
+                        filteredTx.forEach(tx => {
+                            const txDate = tx.date?.seconds ? new Date(tx.date.seconds * 1000) : new Date(tx.date);
+                            totalTx++;
+                            const dayKey = txDate.toISOString().split('T')[0];
+                            const dayLabel = txDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+                            if (!dailyMap[dayKey]) dailyMap[dayKey] = { key: dayKey, label: dayLabel, omzet: 0, txCount: 0 };
+
+                            let txOmzet = 0;
+                            (tx.items || []).forEach(item => {
+                                if (item.isRacikanGroup) return;
+                                const validQty = Math.max(0, (item.cartQty || 0) - (item.returnedQty || 0));
+                                if (validQty <= 0) return;
+                                const itemOmzet = validQty * (item.price || 0);
+                                txOmzet += itemOmzet;
+                                const pKey = item.name || 'Unknown';
+                                if (!productMap[pKey]) productMap[pKey] = { name: pKey, qty: 0, omzet: 0 };
+                                productMap[pKey].qty += validQty;
+                                productMap[pKey].omzet += itemOmzet;
+                            });
+
+                            dailyMap[dayKey].omzet += txOmzet;
+                            dailyMap[dayKey].txCount++;
+                            totalOmzet += txOmzet;
+
+                            const hour = txDate.getHours();
+                            hourMap[hour].count++;
+                            hourMap[hour].omzet += txOmzet;
+
+                            const pm = tx.paymentMethod || 'tunai';
+                            if (!paymentMap[pm]) paymentMap[pm] = { method: pm, count: 0, omzet: 0 };
+                            paymentMap[pm].count++;
+                            paymentMap[pm].omzet += txOmzet;
+                        });
+
+                        let daily;
+                        if (filterMode === '7d' || filterMode === '30d') {
+                            const days = filterMode === '7d' ? 7 : 30;
+                            const now = new Date();
+                            daily = Array.from({ length: days }, (_, i) => {
+                                const d = new Date(now);
+                                d.setDate(d.getDate() - (days - 1 - i));
+                                const key = d.toISOString().split('T')[0];
+                                const label = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+                                return dailyMap[key] || { key, label, omzet: 0, txCount: 0 };
+                            });
+                        } else {
+                            daily = Object.values(dailyMap).sort((a, b) => a.key.localeCompare(b.key));
+                        }
+
+                        const payments = Object.values(paymentMap).sort((a, b) => b.count - a.count);
+                        const totalPayCount = payments.reduce((s, p) => s + p.count, 0);
+                        return { daily, productMap, hourMap, payments, totalPayCount, totalOmzet, totalTx };
+                    }, [filteredTx, filterMode]);
+
+                    const { daily, productMap, hourMap, payments, totalPayCount, totalOmzet, totalTx } = analyticsData;
+                    const topProducts = Object.values(productMap).sort((a, b) => topMode === 'qty' ? b.qty - a.qty : b.omzet - a.omzet).slice(0, 15);
+                    const maxOmzetDay = Math.max(...daily.map(d => d.omzet), 1);
+                    const maxHour = Math.max(...hourMap.map(h => h.count), 1);
+                    const maxProdVal = topProducts.length > 0 ? (topMode === 'qty' ? topProducts[0].qty : topProducts[0].omzet) : 1;
+                    const pmMeta = { tunai: { label: 'Tunai', color: '#3b82f6' }, qris: { label: 'QRIS', color: '#8b5cf6' }, transfer: { label: 'Transfer', color: '#f59e0b' }, kartu: { label: 'Kartu', color: '#ec4899' } };
+                    const CHART_COLORS = ['#7c3aed','#a78bfa','#c4b5fd','#ddd6fe','#ede9fe'];
+                    const PAY_COLORS = ['#3b82f6','#8b5cf6','#f59e0b','#ec4899','#10b981'];
+                    const todayKey = new Date().toISOString().split('T')[0];
+
+                    const DonutChart = ({ items, total, colors }) => {
+                        const r = 45, cx = 60, cy = 60, circ = 2 * Math.PI * r;
+                        let offset = 0;
+                        const segs = items.map((p, i) => {
+                            const dash = total > 0 ? (p.count / total) * circ : 0;
+                            const s = { ...p, dash, gap: circ - dash, offset, color: colors[i % colors.length] };
+                            offset += dash;
+                            return s;
+                        });
+                        return (
+                            <svg viewBox="0 0 120 120" width="120" height="120" style={{ transform: 'rotate(-90deg)', flexShrink: 0 }}>
+                                {segs.map((s, i) => (
+                                    <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={s.color} strokeWidth="20"
+                                        strokeDasharray={`${s.dash} ${s.gap}`} strokeDashoffset={-s.offset} />
+                                ))}
+                            </svg>
+                        );
+                    };
+
+                    if (loading) return (
+                        <div className="flex items-center justify-center py-24 text-slate-400">
+                            <Icon name="spinner" className="animate-spin mr-2 text-xl" /> Memuat data analitik...
+                        </div>
+                    );
+
+                    const filterOpts = [{ id: '7d', label: '7 Hari' }, { id: '30d', label: '30 Hari' }, { id: 'this_month', label: 'Bulan Ini' }, { id: 'last_month', label: 'Bulan Lalu' }, { id: 'custom', label: 'Custom' }];
+                    const chartTabs = [{ id: 'tren', label: 'Tren Omzet', icon: 'chart-line' }, { id: 'produk', label: 'Barang Terlaris', icon: 'fire' }, { id: 'jam', label: 'Jam Sibuk', icon: 'clock' }, { id: 'bayar', label: 'Pembayaran', icon: 'wallet' }];
+                    const activeDays = daily.filter(d => d.omzet > 0);
+                    const bestDay = daily.reduce((best, d) => d.omzet > best.omzet ? d : best, daily[0] || { label: '-', omzet: 0 });
+                    const peakHour = [...hourMap].sort((a, b) => b.count - a.count)[0];
+
+                    return (
+                        <div className="space-y-4 pb-10">
+                            {/* Header */}
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-lg flex-shrink-0" style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)' }}>
+                                    <Icon name="chart-mixed" className="text-lg" />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-black text-slate-800">Analitik Penjualan</h2>
+                                    <p className="text-xs text-slate-400">{currentProfile?.name || 'Semua Toko'}</p>
+                                </div>
+                            </div>
+
+                            {/* Filter */}
+                            <div className="flex flex-wrap gap-2">
+                                {filterOpts.map(f => (
+                                    <button key={f.id} onClick={() => setFilterMode(f.id)}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${filterMode === f.id ? 'text-white shadow' : 'bg-white text-slate-500 border border-slate-200 hover:border-violet-200'}`}
+                                        style={filterMode === f.id ? { background: 'linear-gradient(135deg,#7c3aed,#a855f7)' } : {}}>
+                                        {f.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {filterMode === 'custom' && (
+                                <div className="flex gap-2 items-center flex-wrap">
+                                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="flex-1 min-w-[130px] border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+                                    <span className="text-slate-400 text-xs font-bold">s/d</span>
+                                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="flex-1 min-w-[130px] border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+                                </div>
+                            )}
+
+                            {/* Headline stats */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="col-span-2 rounded-2xl p-4 text-white shadow-lg" style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)' }}>
+                                    <p className="text-xs text-violet-200 font-bold uppercase tracking-wide">Total Omzet</p>
+                                    <p className="text-3xl font-black mt-1">{formatRupiah(totalOmzet)}</p>
+                                    <div className="flex gap-4 mt-2">
+                                        <div><p className="text-[10px] text-violet-300">Transaksi</p><p className="text-sm font-black">{totalTx.toLocaleString('id-ID')}</p></div>
+                                        <div><p className="text-[10px] text-violet-300">Rata-rata/tx</p><p className="text-sm font-black">{totalTx > 0 ? formatRupiah(Math.round(totalOmzet / totalTx)) : '-'}</p></div>
+                                        <div><p className="text-[10px] text-violet-300">Hari aktif</p><p className="text-sm font-black">{activeDays.length}</p></div>
+                                    </div>
+                                </div>
+                                <div className="bg-white rounded-2xl p-3 border border-slate-100 shadow-soft text-center">
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase">Hari Terbaik</p>
+                                    <p className="text-xs font-black text-violet-700 mt-1">{bestDay?.label || '-'}</p>
+                                    <p className="text-[10px] text-slate-500 mt-0.5">{formatRupiah(bestDay?.omzet || 0)}</p>
+                                </div>
+                                <div className="bg-white rounded-2xl p-3 border border-slate-100 shadow-soft text-center">
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase">Jam Tersibuk</p>
+                                    <p className="text-xs font-black text-violet-700 mt-1">{peakHour?.count > 0 ? `${String(peakHour.hour).padStart(2,'0')}.00` : '-'}</p>
+                                    <p className="text-[10px] text-slate-500 mt-0.5">{peakHour?.count > 0 ? `${peakHour.count} transaksi` : '-'}</p>
+                                </div>
+                            </div>
+
+                            {/* Chart section tabs */}
+                            <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+                                {chartTabs.map(t => (
+                                    <button key={t.id} onClick={() => setChartTab(t.id)}
+                                        className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-bold rounded-lg transition-all ${chartTab === t.id ? 'bg-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                        style={chartTab === t.id ? { color: '#7c3aed' } : {}}>
+                                        <Icon name={t.icon} className="text-sm" />
+                                        <span>{t.label.split(' ')[0]}</span>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* ── TREN OMZET ── */}
+                            {chartTab === 'tren' && (
+                                <div className="bg-white rounded-2xl border border-slate-100 shadow-soft overflow-hidden">
+                                    <div className="flex items-center justify-between p-4 border-b border-slate-50">
+                                        <div>
+                                            <p className="text-sm font-black text-slate-800">Tren Omzet Harian</p>
+                                            <p className="text-[10px] text-slate-400">{daily.length} hari dalam periode ini</p>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm" style={{ background: '#7c3aed' }}></div><span className="text-[10px] text-slate-400">Hari ini</span></div>
+                                            <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm" style={{ background: '#a78bfa' }}></div><span className="text-[10px] text-slate-400">Lainnya</span></div>
+                                        </div>
+                                    </div>
+                                    {daily.length === 0 ? (
+                                        <div className="flex items-center justify-center py-16 text-slate-300"><div className="text-center"><Icon name="chart-bar" className="text-4xl mb-2" /><p className="text-sm">Tidak ada data</p></div></div>
+                                    ) : (
+                                        <div className="p-4">
+                                            {/* Chart area */}
+                                            <div style={{ position: 'relative', paddingLeft: '42px' }}>
+                                                {/* Y axis labels */}
+                                                <div style={{ position: 'absolute', left: 0, top: 0, bottom: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', width: '40px' }}>
+                                                    {[1, 0.75, 0.5, 0.25, 0].map(pct => (
+                                                        <span key={pct} style={{ fontSize: '8px', color: '#cbd5e1', textAlign: 'right', paddingRight: '4px', lineHeight: 1 }}>
+                                                            {pct === 0 ? '0' : formatRupiah(maxOmzetDay * pct).replace('Rp\u00a0', '').replace(/\.000\.000$/, 'jt').replace(/\.000$/, 'rb')}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                                {/* Grid + bars */}
+                                                <div style={{ position: 'relative' }}>
+                                                    {[0.75, 0.5, 0.25].map(pct => (
+                                                        <div key={pct} style={{ position: 'absolute', left: 0, right: 0, top: `${(1 - pct) * 100}%`, borderTop: '1px dashed #f1f5f9', zIndex: 0, transform: 'translateY(-100%)' }} />
+                                                    ))}
+                                                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: daily.length > 20 ? '2px' : daily.length > 12 ? '3px' : '5px', height: '140px', overflowX: 'visible', position: 'relative', zIndex: 1 }}>
+                                                        {daily.map((d) => {
+                                                            const pct = maxOmzetDay > 0 ? d.omzet / maxOmzetDay : 0;
+                                                            const barH = Math.max(pct * 100, d.omzet > 0 ? 2 : 0);
+                                                            const isToday = d.key === todayKey;
+                                                            return (
+                                                                <div key={d.key} title={`${d.label}\nOmzet: ${formatRupiah(d.omzet)}\n${d.txCount} transaksi`}
+                                                                    style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', height: '100%', cursor: 'pointer' }}>
+                                                                    <div style={{
+                                                                        width: '100%', maxWidth: '28px',
+                                                                        height: `${barH}%`,
+                                                                        minHeight: d.omzet > 0 ? '3px' : '1px',
+                                                                        background: isToday ? '#7c3aed' : d.omzet > 0 ? '#a78bfa' : '#f1f5f9',
+                                                                        borderRadius: '4px 4px 0 0',
+                                                                        boxShadow: isToday ? '0 2px 8px rgba(124,58,237,0.4)' : 'none',
+                                                                    }} />
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                    <div style={{ borderTop: '2px solid #e2e8f0', marginTop: 0 }} />
+                                                </div>
+                                                {/* X axis labels */}
+                                                <div style={{ display: 'flex', gap: daily.length > 20 ? '2px' : daily.length > 12 ? '3px' : '5px', marginTop: '4px' }}>
+                                                    {daily.map((d, i) => {
+                                                        const show = daily.length <= 8 || i === 0 || i === daily.length - 1 || i % Math.ceil(daily.length / 6) === 0;
+                                                        return (
+                                                            <div key={d.key} style={{ flex: 1, display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
+                                                                {show && <span style={{ fontSize: '8px', color: d.key === todayKey ? '#7c3aed' : '#94a3b8', fontWeight: d.key === todayKey ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '32px', display: 'block', textAlign: 'center' }}>{d.label}</span>}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                            {/* Summary strip */}
+                                            <div className="flex gap-3 mt-4 pt-3 border-t border-slate-50">
+                                                {[
+                                                    { label: 'Tertinggi', value: formatRupiah(Math.max(...daily.map(d => d.omzet))), color: '#7c3aed' },
+                                                    { label: 'Terendah', value: activeDays.length > 0 ? formatRupiah(Math.min(...activeDays.map(d => d.omzet))) : '-', color: '#94a3b8' },
+                                                    { label: 'Rata-rata/hari', value: activeDays.length > 0 ? formatRupiah(Math.round(totalOmzet / activeDays.length)) : '-', color: '#475569' },
+                                                ].map(s => (
+                                                    <div key={s.label} className="flex-1 text-center">
+                                                        <p className="text-[9px] text-slate-400 font-bold uppercase">{s.label}</p>
+                                                        <p className="text-[11px] font-black mt-0.5" style={{ color: s.color }}>{s.value}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ── BARANG TERLARIS ── */}
+                            {chartTab === 'produk' && (
+                                <div className="space-y-3">
+                                    <div className="flex gap-2">
+                                        {[{ id: 'qty', label: 'Qty Terjual', icon: 'sort-amount-down' }, { id: 'omzet', label: 'Omzet', icon: 'coins' }].map(m => (
+                                            <button key={m.id} onClick={() => setTopMode(m.id)}
+                                                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all ${topMode === m.id ? 'text-white shadow' : 'bg-white text-slate-500 border border-slate-200'}`}
+                                                style={topMode === m.id ? { background: 'linear-gradient(135deg,#7c3aed,#a855f7)' } : {}}>
+                                                <Icon name={m.icon} className="text-[10px]" />{m.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {topProducts.length === 0 ? (
+                                        <div className="text-center py-12 text-slate-300"><Icon name="box-open" className="text-4xl mb-2" /><p className="text-sm">Tidak ada data</p></div>
+                                    ) : (
+                                        <div className="bg-white rounded-2xl border border-slate-100 shadow-soft overflow-hidden">
+                                            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-50">
+                                                <div>
+                                                    <p className="text-sm font-black text-slate-800">Top {topProducts.length} Barang</p>
+                                                    <p className="text-[10px] text-slate-400">{topMode === 'qty' ? 'Berdasarkan unit terjual' : 'Berdasarkan total omzet'}</p>
+                                                </div>
+                                            </div>
+                                            <div className="divide-y divide-slate-50">
+                                                {topProducts.map((p, i) => {
+                                                    const val = topMode === 'qty' ? p.qty : p.omzet;
+                                                    const barW = maxProdVal > 0 ? Math.max(3, (val / maxProdVal) * 100) : 3;
+                                                    const medals = ['🥇','🥈','🥉'];
+                                                    return (
+                                                        <div key={p.name + i} className="px-4 py-3 hover:bg-slate-50 transition-colors">
+                                                            <div className="flex items-center gap-2 mb-1.5">
+                                                                <div className="w-6 flex-shrink-0 text-center">
+                                                                    {i < 3 ? <span style={{ fontSize: '15px' }}>{medals[i]}</span> : <span className="text-[10px] font-black text-slate-300">#{i+1}</span>}
+                                                                </div>
+                                                                <p className="text-xs font-bold text-slate-800 flex-1 truncate">{p.name}</p>
+                                                                <div className="text-right flex-shrink-0">
+                                                                    <p className="text-xs font-black" style={{ color: '#7c3aed' }}>
+                                                                        {topMode === 'qty' ? `${p.qty.toLocaleString('id-ID')} unit` : formatRupiah(p.omzet)}
+                                                                    </p>
+                                                                    <p className="text-[9px] text-slate-400">
+                                                                        {topMode === 'qty' ? formatRupiah(p.omzet) : `${p.qty.toLocaleString('id-ID')} unit`}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="ml-8 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                                <div className="h-full rounded-full" style={{ width: `${barW}%`, background: CHART_COLORS[Math.min(i, CHART_COLORS.length - 1)], transition: 'width 0.5s ease' }} />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ── JAM SIBUK ── */}
+                            {chartTab === 'jam' && (
+                                <div className="bg-white rounded-2xl border border-slate-100 shadow-soft p-4">
+                                    <div className="mb-3">
+                                        <p className="text-sm font-black text-slate-800">Heatmap Jam Transaksi</p>
+                                        <p className="text-[10px] text-slate-400">Semakin gelap = semakin ramai</p>
+                                    </div>
+                                    {peakHour && peakHour.count > 0 ? (
+                                        <>
+                                            <div className="rounded-xl p-3 mb-4 flex items-center gap-3" style={{ background: 'linear-gradient(135deg,#ede9fe,#ddd6fe)' }}>
+                                                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white flex-shrink-0" style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)' }}>
+                                                    <Icon name="fire" className="text-base" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] text-slate-500 font-bold">Jam Tersibuk</p>
+                                                    <p className="text-xl font-black" style={{ color: '#7c3aed' }}>{String(peakHour.hour).padStart(2,'0')}.00 – {String(peakHour.hour + 1).padStart(2,'0')}.00</p>
+                                                    <p className="text-[10px] text-slate-500">{peakHour.count} transaksi · {formatRupiah(peakHour.omzet)}</p>
+                                                </div>
+                                            </div>
+                                            {[
+                                                { label: '🌙 Dini Hari', range: [0, 5] },
+                                                { label: '🌅 Pagi', range: [6, 11] },
+                                                { label: '☀️ Siang', range: [12, 17] },
+                                                { label: '🌆 Malam', range: [18, 23] },
+                                            ].map(group => {
+                                                const hours = hourMap.slice(group.range[0], group.range[1] + 1);
+                                                const groupTotal = hours.reduce((s, h) => s + h.count, 0);
+                                                return (
+                                                    <div key={group.label} className="mb-3">
+                                                        <div className="flex justify-between mb-1">
+                                                            <p className="text-[10px] font-bold text-slate-500">{group.label}</p>
+                                                            <p className="text-[10px] text-slate-400">{groupTotal} transaksi</p>
+                                                        </div>
+                                                        <div className="flex gap-1">
+                                                            {hours.map(h => {
+                                                                const intensity = maxHour > 0 ? h.count / maxHour : 0;
+                                                                const isPeak = h.hour === peakHour.hour;
+                                                                const bg = isPeak ? '#5b21b6' : intensity === 0 ? '#f8fafc' : intensity < 0.2 ? '#ede9fe' : intensity < 0.45 ? '#c4b5fd' : intensity < 0.7 ? '#a78bfa' : '#7c3aed';
+                                                                const tc = intensity > 0.4 || isPeak ? '#fff' : '#6b7280';
+                                                                return (
+                                                                    <div key={h.hour} title={`${String(h.hour).padStart(2,'0')}.00: ${h.count} transaksi\n${formatRupiah(h.omzet)}`}
+                                                                        style={{ flex: 1, background: bg, borderRadius: '6px', padding: '5px 1px', textAlign: 'center', cursor: 'pointer', boxShadow: isPeak ? '0 2px 8px rgba(124,58,237,0.5)' : 'none', transition: 'background 0.3s' }}>
+                                                                        <p style={{ fontSize: '8px', color: tc, fontWeight: 700, lineHeight: 1.4 }}>{String(h.hour).padStart(2,'0')}</p>
+                                                                        {h.count > 0 && <p style={{ fontSize: '8px', color: tc, fontWeight: 600, lineHeight: 1.2 }}>{h.count}</p>}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </>
+                                    ) : (
+                                        <div className="text-center py-12 text-slate-300"><Icon name="clock" className="text-4xl mb-2" /><p className="text-sm">Tidak ada data</p></div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ── METODE BAYAR ── */}
+                            {chartTab === 'bayar' && (
+                                <div className="bg-white rounded-2xl border border-slate-100 shadow-soft p-4">
+                                    <p className="text-sm font-black text-slate-800 mb-4">Distribusi Metode Pembayaran</p>
+                                    {payments.length === 0 ? (
+                                        <div className="text-center py-12 text-slate-300"><Icon name="wallet" className="text-4xl mb-2" /><p className="text-sm">Tidak ada data</p></div>
+                                    ) : (
+                                        <>
+                                            <div className="flex items-center gap-5 mb-5">
+                                                <div style={{ position: 'relative', flexShrink: 0, width: 120, height: 120 }}>
+                                                    <DonutChart items={payments} total={totalPayCount} colors={PAY_COLORS} />
+                                                    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                                                        <p className="text-lg font-black text-slate-800 leading-none">{totalPayCount}</p>
+                                                        <p className="text-[9px] text-slate-400 font-semibold">transaksi</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex-1 space-y-2 min-w-0">
+                                                    {payments.map((p, i) => {
+                                                        const info = pmMeta[p.method] || { label: p.method.charAt(0).toUpperCase() + p.method.slice(1) };
+                                                        const pct = totalPayCount > 0 ? (p.count / totalPayCount * 100) : 0;
+                                                        return (
+                                                            <div key={p.method} className="flex items-center gap-2">
+                                                                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: PAY_COLORS[i % PAY_COLORS.length] }} />
+                                                                <p className="text-xs text-slate-700 font-bold flex-1 min-w-0 truncate">{info.label}</p>
+                                                                <p className="text-xs font-black text-slate-600 flex-shrink-0">{pct.toFixed(0)}%</p>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                            <div className="space-y-3 pt-3 border-t border-slate-50">
+                                                {payments.map((p, i) => {
+                                                    const info = pmMeta[p.method] || { label: p.method.charAt(0).toUpperCase() + p.method.slice(1) };
+                                                    const pct = totalPayCount > 0 ? (p.count / totalPayCount * 100) : 0;
+                                                    return (
+                                                        <div key={p.method}>
+                                                            <div className="flex items-center justify-between mb-1">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PAY_COLORS[i % PAY_COLORS.length] }} />
+                                                                    <p className="text-xs font-bold text-slate-700">{info.label}</p>
+                                                                </div>
+                                                                <div className="flex items-center gap-3">
+                                                                    <p className="text-[10px] text-slate-400">{p.count} transaksi</p>
+                                                                    <p className="text-xs font-black text-slate-800">{formatRupiah(p.omzet)}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                                                <div className="h-full rounded-full" style={{ width: `${Math.max(3, pct)}%`, background: PAY_COLORS[i % PAY_COLORS.length], transition: 'width 0.5s ease' }} />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    );
+                };
+
+                const LaporanLabaRugiView = ({ user, currentProfile }) => {
+                    const [transactions, setTransactions] = useState([]);
+                    const [loading, setLoading] = useState(true);
+                    const [filterMode, setFilterMode] = useState('this_month');
+                    const [startDate, setStartDate] = useState('');
+                    const [endDate, setEndDate] = useState('');
+                    const [activeSection, setActiveSection] = useState('produk');
+                    const [searchQuery, setSearchQuery] = useState('');
+
+                    useEffect(() => {
+                        if (!user) return;
+                        setLoading(true);
+                        const q = window.query(
+                            window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions'),
+                            window.orderBy('date', 'desc'),
+                            window.limit(2000)
+                        );
+                        const unsub = window.onSnapshot(q, snap => {
+                            setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                            setLoading(false);
+                        }, () => setLoading(false));
+                        return () => unsub();
+                    }, [user]);
+
+                    const getPeriodLabel = () => {
+                        if (filterMode === 'today') return 'Hari Ini';
+                        if (filterMode === 'this_week') return 'Minggu Ini';
+                        if (filterMode === 'this_month') return new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' });
+                        if (filterMode === 'last_month') { const lm = new Date(); lm.setMonth(lm.getMonth() - 1); return lm.toLocaleString('id-ID', { month: 'long', year: 'numeric' }); }
+                        if (filterMode === 'custom' && startDate && endDate) return `${new Date(startDate).toLocaleDateString('id-ID')} s/d ${new Date(endDate).toLocaleDateString('id-ID')}`;
+                        return '-';
+                    };
+
+                    const filteredTx = React.useMemo(() => {
+                        const now = new Date();
+                        return transactions.filter(tx => {
+                            if (tx.status === 'returned') return false;
+                            if (currentProfile?.id && currentProfile.id !== 'all_stores' && tx.storeId && tx.storeId !== currentProfile.id) return false;
+                            const txDate = tx.date?.seconds ? new Date(tx.date.seconds * 1000) : new Date(tx.date);
+                            if (filterMode === 'today') return txDate.toDateString() === now.toDateString();
+                            if (filterMode === 'this_week') { const sow = new Date(now); sow.setDate(now.getDate() - now.getDay()); sow.setHours(0,0,0,0); return txDate >= sow; }
+                            if (filterMode === 'this_month') return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
+                            if (filterMode === 'last_month') { const lm = new Date(now.getFullYear(), now.getMonth()-1, 1); const lmEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59); return txDate >= lm && txDate <= lmEnd; }
+                            if (filterMode === 'custom') { if (!startDate || !endDate) return true; const s = new Date(startDate); s.setHours(0,0,0,0); const e = new Date(endDate); e.setHours(23,59,59,999); return txDate >= s && txDate <= e; }
+                            return true;
+                        });
+                    }, [transactions, filterMode, currentProfile, startDate, endDate]);
+
+                    const plData = React.useMemo(() => {
+                        let omzet = 0, hpp = 0, retur = 0, txCount = 0;
+                        let itemsNoCost = 0, totalValidItems = 0;
+                        const productMap = {}, kasirMap = {}, paymentMap = {};
+
+                        filteredTx.forEach(tx => {
+                            txCount++;
+                            let txOmzet = 0, txHPP = 0;
+
+                            (tx.items || []).forEach(item => {
+                                if (item.isRacikanGroup) return;
+                                const validQty = Math.max(0, (item.cartQty || 0) - (item.returnedQty || 0));
+                                const returQty = item.returnedQty || 0;
+                                if (returQty > 0) retur += returQty * (item.price || 0);
+                                if (validQty <= 0) return;
+
+                                const itemOmzet = validQty * (item.price || 0);
+                                const itemHPP = (item.costPrice > 0) ? validQty * item.costPrice : 0;
+                                txOmzet += itemOmzet;
+                                txHPP += itemHPP;
+                                totalValidItems++;
+                                if (!item.costPrice || item.costPrice === 0) itemsNoCost++;
+
+                                const pKey = item.name || 'Unknown';
+                                if (!productMap[pKey]) productMap[pKey] = { name: pKey, qty: 0, omzet: 0, hpp: 0, missingCost: false };
+                                productMap[pKey].qty += validQty;
+                                productMap[pKey].omzet += itemOmzet;
+                                productMap[pKey].hpp += itemHPP;
+                                if (!item.costPrice || item.costPrice === 0) productMap[pKey].missingCost = true;
+                            });
+
+                            omzet += txOmzet;
+                            hpp += txHPP;
+
+                            const kKey = tx.cashierName || 'Unknown';
+                            if (!kasirMap[kKey]) kasirMap[kKey] = { name: kKey, omzet: 0, hpp: 0, txCount: 0 };
+                            kasirMap[kKey].omzet += txOmzet;
+                            kasirMap[kKey].hpp += txHPP;
+                            kasirMap[kKey].txCount++;
+
+                            const pm = tx.paymentMethod || 'tunai';
+                            if (!paymentMap[pm]) paymentMap[pm] = { method: pm, omzet: 0, count: 0 };
+                            paymentMap[pm].omzet += txOmzet;
+                            paymentMap[pm].count++;
+                        });
+
+                        const laba = omzet - hpp;
+                        const margin = omzet > 0 ? (laba / omzet) * 100 : 0;
+                        const coveragePct = totalValidItems > 0 ? ((totalValidItems - itemsNoCost) / totalValidItems * 100) : 100;
+                        const products = Object.values(productMap).map(p => ({ ...p, laba: p.omzet - p.hpp, margin: p.omzet > 0 ? (p.omzet - p.hpp) / p.omzet * 100 : 0 })).sort((a, b) => b.laba - a.laba);
+                        const kasirs = Object.values(kasirMap).map(k => ({ ...k, laba: k.omzet - k.hpp, margin: k.omzet > 0 ? (k.omzet - k.hpp) / k.omzet * 100 : 0 })).sort((a, b) => b.omzet - a.omzet);
+                        const payments = Object.values(paymentMap).sort((a, b) => b.omzet - a.omzet);
+                        const totalPayOmzet = payments.reduce((s, p) => s + p.omzet, 0);
+                        return { omzet, hpp, laba, margin, retur, txCount, coveragePct, itemsNoCost, totalValidItems, products, kasirs, payments, totalPayOmzet };
+                    }, [filteredTx]);
+
+                    const filteredProducts = React.useMemo(() => {
+                        if (!searchQuery) return plData.products;
+                        return plData.products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
+                    }, [plData.products, searchQuery]);
+
+                    const pmMeta = { tunai: { label: 'Tunai', color: '#0ea5e9', icon: 'money-bill' }, qris: { label: 'QRIS', color: '#8b5cf6', icon: 'qrcode' }, transfer: { label: 'Transfer', color: '#f59e0b', icon: 'building-columns' }, kartu: { label: 'Kartu', color: '#ec4899', icon: 'credit-card' } };
+                    const filterOptions = [{ id: 'today', label: 'Hari Ini' }, { id: 'this_week', label: 'Minggu Ini' }, { id: 'this_month', label: 'Bulan Ini' }, { id: 'last_month', label: 'Bulan Lalu' }, { id: 'custom', label: 'Custom' }];
+
+                    if (loading) return (
+                        <div className="flex items-center justify-center py-24 text-slate-400">
+                            <Icon name="spinner" className="animate-spin mr-2 text-xl" /> Memuat laporan...
+                        </div>
+                    );
+
+                    const { omzet, hpp, laba, margin, retur, txCount, coveragePct, products, kasirs, payments, totalPayOmzet } = plData;
+                    const isHPPMissing = coveragePct === 0 && plData.totalValidItems > 0;
+                    const isHPPPartial = coveragePct > 0 && coveragePct < 100;
+
+                    return (
+                        <div className="space-y-4 pb-10">
+                            {/* Header */}
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-lg flex-shrink-0">
+                                    <Icon name="chart-line" className="text-lg" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <h2 className="text-xl font-black text-slate-800">Laporan Laba Rugi</h2>
+                                    <p className="text-xs text-slate-400">{currentProfile?.name || 'Semua Toko'} · {getPeriodLabel()}</p>
+                                </div>
+                            </div>
+
+                            {/* Filter Period */}
+                            <div className="flex flex-wrap gap-2">
+                                {filterOptions.map(f => (
+                                    <button key={f.id} onClick={() => setFilterMode(f.id)}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${filterMode === f.id ? 'bg-emerald-600 text-white shadow' : 'bg-white text-slate-500 border border-slate-200 hover:bg-emerald-50'}`}>
+                                        {f.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Custom range */}
+                            {filterMode === 'custom' && (
+                                <div className="flex gap-2 items-center flex-wrap">
+                                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                                        className="flex-1 min-w-[130px] border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
+                                    <span className="text-slate-400 text-xs font-bold">s/d</span>
+                                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+                                        className="flex-1 min-w-[130px] border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
+                                </div>
+                            )}
+
+                            {/* HPP Warning */}
+                            {isHPPMissing && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-start gap-2">
+                                    <Icon name="triangle-exclamation" className="text-amber-500 mt-0.5 flex-shrink-0" />
+                                    <div>
+                                        <p className="text-xs font-bold text-amber-800">Data Harga Modal Belum Ada</p>
+                                        <p className="text-xs text-amber-600 mt-0.5">HPP dan laba belum bisa dihitung. Isi harga modal di menu Katalog agar laporan akurat.</p>
+                                    </div>
+                                </div>
+                            )}
+                            {isHPPPartial && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-start gap-2">
+                                    <Icon name="circle-exclamation" className="text-amber-500 mt-0.5 flex-shrink-0" />
+                                    <div>
+                                        <p className="text-xs font-bold text-amber-800">Data HPP Sebagian ({Math.round(coveragePct)}% lengkap)</p>
+                                        <p className="text-xs text-amber-600 mt-0.5">Beberapa barang belum punya harga modal — estimasi laba mungkin lebih tinggi dari kenyataan.</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Omzet full-width */}
+                            <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-soft">
+                                <p className="text-xs text-slate-400 font-bold uppercase tracking-wide">Omzet Bersih</p>
+                                <p className="text-3xl font-black text-slate-800 mt-1">{formatRupiah(omzet)}</p>
+                                <div className="flex gap-4 mt-2">
+                                    <div><p className="text-[10px] text-slate-400">Transaksi</p><p className="text-sm font-bold text-slate-700">{txCount.toLocaleString('id-ID')}</p></div>
+                                    <div><p className="text-[10px] text-slate-400">Rata-rata</p><p className="text-sm font-bold text-slate-700">{txCount > 0 ? formatRupiah(Math.round(omzet / txCount)) : '-'}</p></div>
+                                    {retur > 0 && <div><p className="text-[10px] text-red-400">Nilai Retur</p><p className="text-sm font-bold text-red-500">-{formatRupiah(retur)}</p></div>}
+                                </div>
+                            </div>
+
+                            {/* HPP + Laba grid */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-soft">
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wide">Est. HPP</p>
+                                    <p className="text-lg font-black text-orange-600 mt-1">{isHPPMissing ? <span className="text-slate-300">—</span> : formatRupiah(hpp)}</p>
+                                    <p className="text-[10px] text-slate-400 mt-0.5">Total harga modal</p>
+                                </div>
+                                <div className={`rounded-2xl p-4 border shadow-soft ${laba >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wide">Est. Laba Kotor</p>
+                                    <p className={`text-lg font-black mt-1 ${laba >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{isHPPMissing ? <span className="text-slate-300">—</span> : formatRupiah(laba)}</p>
+                                    <p className="text-[10px] text-slate-500 mt-0.5">Omzet − HPP</p>
+                                </div>
+                            </div>
+
+                            {/* Margin bar */}
+                            {!isHPPMissing && omzet > 0 && (
+                                <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-soft">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Gross Margin</p>
+                                        <span className={`text-base font-black ${margin >= 20 ? 'text-emerald-600' : margin >= 10 ? 'text-amber-500' : 'text-red-500'}`}>{margin.toFixed(1)}%</span>
+                                    </div>
+                                    <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                                        <div className={`h-full rounded-full transition-all ${margin >= 20 ? 'bg-emerald-500' : margin >= 10 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${Math.min(100, Math.max(2, margin))}%` }}></div>
+                                    </div>
+                                    <div className="flex justify-between mt-1.5 text-[10px] text-slate-300 font-semibold">
+                                        <span>0%</span><span>25%</span><span>50%+</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Section tabs */}
+                            <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+                                {[{ id: 'produk', label: 'Per Produk', icon: 'box' }, { id: 'kasir', label: 'Per Kasir', icon: 'user' }, { id: 'bayar', label: 'Metode Bayar', icon: 'wallet' }].map(s => (
+                                    <button key={s.id} onClick={() => setActiveSection(s.id)}
+                                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all ${activeSection === s.id ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                                        <Icon name={s.icon} className="text-xs" />
+                                        <span className="hidden sm:inline">{s.label}</span>
+                                        <span className="sm:hidden">{s.label.split(' ')[1] || s.label.split(' ')[0]}</span>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Per Produk */}
+                            {activeSection === 'produk' && (
+                                <div className="space-y-3">
+                                    <div className="relative">
+                                        <Icon name="magnifying-glass" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+                                        <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Cari nama barang..."
+                                            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
+                                    </div>
+                                    <p className="text-xs text-slate-400 font-semibold">{filteredProducts.length} jenis barang · Urut: Laba Tertinggi</p>
+                                    {filteredProducts.length === 0 && (
+                                        <div className="text-center py-12 text-slate-400"><Icon name="box-open" className="text-4xl mb-2" /><p className="text-sm">Tidak ada data</p></div>
+                                    )}
+                                    {filteredProducts.map((p, i) => {
+                                        const maxOmzet = filteredProducts[0]?.omzet || 1;
+                                        const barW = Math.max(3, (p.omzet / maxOmzet) * 100);
+                                        const labaColor = !p.hpp ? 'text-slate-400' : p.laba > 0 ? 'text-emerald-700' : p.laba < 0 ? 'text-red-600' : 'text-slate-500';
+                                        const barColor = p.laba >= 0 ? '#34d399' : '#f87171';
+                                        return (
+                                            <div key={p.name + i} className="bg-white rounded-2xl p-4 border border-slate-100 shadow-soft">
+                                                <div className="flex items-start justify-between gap-2 mb-2">
+                                                    <div className="flex items-start gap-2 min-w-0">
+                                                        <span className="text-xs text-slate-300 font-black w-5 flex-shrink-0 mt-0.5">#{i+1}</span>
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-bold text-slate-800 truncate">{p.name}</p>
+                                                            {p.missingCost && <span className="inline-flex items-center gap-0.5 text-[9px] bg-amber-100 text-amber-600 font-bold px-1.5 py-0.5 rounded-full mt-0.5"><Icon name="triangle-exclamation" className="text-[8px]" /> No HPP</span>}
+                                                        </div>
+                                                    </div>
+                                                    <p className={`text-sm font-black flex-shrink-0 ${labaColor}`}>{(p.hpp > 0) ? formatRupiah(p.laba) : '—'}</p>
+                                                </div>
+                                                <div className="h-1.5 bg-slate-100 rounded-full mb-3 overflow-hidden">
+                                                    <div className="h-full rounded-full transition-all" style={{ width: `${barW}%`, background: barColor }}></div>
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-1 text-center">
+                                                    <div className="bg-slate-50 rounded-lg py-1.5">
+                                                        <p className="text-[9px] text-slate-400 font-bold uppercase">Qty</p>
+                                                        <p className="text-xs font-black text-slate-700">{p.qty.toLocaleString('id-ID')}</p>
+                                                    </div>
+                                                    <div className="bg-slate-50 rounded-lg py-1.5">
+                                                        <p className="text-[9px] text-slate-400 font-bold uppercase">Omzet</p>
+                                                        <p className="text-[11px] font-black text-slate-700">{formatRupiah(p.omzet)}</p>
+                                                    </div>
+                                                    <div className="bg-slate-50 rounded-lg py-1.5">
+                                                        <p className="text-[9px] text-slate-400 font-bold uppercase">Margin</p>
+                                                        <p className={`text-xs font-black ${labaColor}`}>{(p.hpp > 0) ? `${p.margin.toFixed(1)}%` : '—'}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* Per Kasir */}
+                            {activeSection === 'kasir' && (
+                                <div className="space-y-2">
+                                    {kasirs.length === 0 && <div className="text-center py-12 text-slate-400"><Icon name="user" className="text-4xl mb-2" /><p className="text-sm">Tidak ada data</p></div>}
+                                    {kasirs.map((k, i) => {
+                                        const maxOmzet = kasirs[0]?.omzet || 1;
+                                        const barW = Math.max(3, (k.omzet / maxOmzet) * 100);
+                                        const colors = ['#0ea5e9','#8b5cf6','#f59e0b','#ec4899','#10b981','#f97316'];
+                                        const col = colors[i % colors.length];
+                                        return (
+                                            <div key={k.name} className="bg-white rounded-2xl p-4 border border-slate-100 shadow-soft">
+                                                <div className="flex items-center gap-3 mb-2">
+                                                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black text-white flex-shrink-0" style={{ background: col }}>
+                                                        {k.name.charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-bold text-slate-800 truncate">{k.name}</p>
+                                                        <p className="text-[10px] text-slate-400">{k.txCount} transaksi</p>
+                                                    </div>
+                                                    <div className="text-right flex-shrink-0">
+                                                        <p className="text-sm font-black text-slate-800">{formatRupiah(k.omzet)}</p>
+                                                        {k.hpp > 0 && <p className="text-[10px] text-emerald-600 font-bold">{formatRupiah(k.laba)} laba</p>}
+                                                    </div>
+                                                </div>
+                                                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div className="h-full rounded-full" style={{ width: `${barW}%`, background: col }}></div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* Metode Bayar */}
+                            {activeSection === 'bayar' && (
+                                <div className="space-y-2">
+                                    {payments.length === 0 && <div className="text-center py-12 text-slate-400"><Icon name="wallet" className="text-4xl mb-2" /><p className="text-sm">Tidak ada data</p></div>}
+                                    {payments.map(p => {
+                                        const barW = totalPayOmzet > 0 ? Math.max(3, (p.omzet / totalPayOmzet) * 100) : 3;
+                                        const info = pmMeta[p.method] || { label: p.method.charAt(0).toUpperCase() + p.method.slice(1), color: '#94a3b8', icon: 'money-bill' };
+                                        const pct = totalPayOmzet > 0 ? (p.omzet / totalPayOmzet * 100) : 0;
+                                        return (
+                                            <div key={p.method} className="bg-white rounded-2xl p-4 border border-slate-100 shadow-soft">
+                                                <div className="flex items-center gap-3 mb-2">
+                                                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm flex-shrink-0" style={{ background: info.color + '20', color: info.color }}>
+                                                        <Icon name={info.icon} />
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-bold text-slate-800">{info.label}</p>
+                                                        <p className="text-[10px] text-slate-400">{p.count} transaksi · {pct.toFixed(1)}%</p>
+                                                    </div>
+                                                    <p className="text-sm font-black text-slate-800 flex-shrink-0">{formatRupiah(p.omzet)}</p>
+                                                </div>
+                                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div className="h-full rounded-full transition-all" style={{ width: `${barW}%`, background: info.color }}></div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    );
+                };
+
                 const RekapBarangView = ({ user, currentProfile, settings }) => {
                     const [transactions, setTransactions] = useState([]);
                     const [loading, setLoading] = useState(true);
@@ -18892,7 +19700,7 @@
             const handleSaveSettings = async (newSettings) => { if(!user) return; setSubmitting(true); try { const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'settings', 'global'); await window.setDoc(docRef, newSettings); showToast("Pengaturan disimpan"); } catch(error) { console.error(error); showToast("Gagal simpan pengaturan", "error"); } finally { setSubmitting(false); } };
             const handleDelete = async () => { if (!deleteModal.item || !user) return; try { const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', deleteModal.item.id); await window.deleteDoc(docRef); showToast("Barang dihapus (dari semua toko)"); } catch (error) { showToast("Gagal menghapus", "error"); } finally { setDeleteModal({ show: false, item: null }); } };
             const handleConfirmDeleteRack = async () => { if (!deleteRackModal.rackName || !user) return; const rackName = deleteRackModal.rackName; try { const batch = window.writeBatch(window.db); const itemsToUpdate = inventoryData.filter(item => item.rack && item.rack.includes(rackName)); if (itemsToUpdate.length === 0) { showToast("Tidak ada item di rak ini"); setDeleteRackModal({ show: false, rackName: null }); return; } itemsToUpdate.forEach(item => { const newRacks = item.rack.split(',').map(r => r.trim()).filter(r => r !== rackName); const newRackString = newRacks.length > 0 ? newRacks.join(', ') : '-'; const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id); batch.update(docRef, { rack: newRackString }); }); await batch.commit(); showToast(`Rak "${rackName}" berhasil dihapus`); setSelectedRacks([]); } catch (err) { console.error("Failed delete rack", err); showToast("Gagal menghapus rak", "error"); } finally { setDeleteRackModal({ show: false, rackName: null }); } };
-            const handleNavClick = (tabId, event) => { setActiveTab(tabId); if (tabId !== 'list') setShowOnlyLowStock(false); setIsSidebarOpen(false); if (['cashier','history','rekap_barang'].includes(tabId)) setKasirDropdownOpen(true); else setKasirDropdownOpen(false); if (['list','stok_view','stock_opname','add','import','transfer_barang','batch_ed'].includes(tabId)) setBarangDropdownOpen(true); else setBarangDropdownOpen(false); if (['purchases'].includes(tabId)) setPembelianDropdownOpen(true); else setPembelianDropdownOpen(false); };
+            const handleNavClick = (tabId, event) => { setActiveTab(tabId); if (tabId !== 'list') setShowOnlyLowStock(false); setIsSidebarOpen(false); if (['cashier','history','rekap_barang','laporan_lr','analitik'].includes(tabId)) setKasirDropdownOpen(true); else setKasirDropdownOpen(false); if (['list','stok_view','stock_opname','add','import','transfer_barang','batch_ed'].includes(tabId)) setBarangDropdownOpen(true); else setBarangDropdownOpen(false); if (['purchases'].includes(tabId)) setPembelianDropdownOpen(true); else setPembelianDropdownOpen(false); };
             
             const handleLogout = () => {
                 clearSession();
@@ -19061,6 +19869,8 @@
                                             { id: 'cashier', label: 'Kasir', icon: 'cash-register' },
                                             { id: 'history', label: 'Riwayat Kasir', icon: 'clock-rotate-left' },
                                             { id: 'rekap_barang', label: 'Rekap Barang Terjual', icon: 'chart-bar' },
+                                            { id: 'laporan_lr', label: 'Laporan Laba Rugi', icon: 'chart-line' },
+                                            { id: 'analitik', label: 'Analitik Penjualan', icon: 'chart-mixed' },
                                         ];
                                         const kasirSubIds = kasirSubItems.map(s => s.id);
                                         const isKasirGroupActive = kasirSubIds.includes(activeTab);
@@ -19084,7 +19894,7 @@
                                                 </div>
                                                 {/* Dropdown sub-menu */}
                                                 {kasirDropdownOpen && (
-                                                    <div style={{overflow:'hidden',maxHeight: kasirDropdownOpen ? '250px' : '0',transition:'max-height .28s ease'}}>
+                                                    <div style={{overflow:'hidden',maxHeight: kasirDropdownOpen ? '400px' : '0',transition:'max-height .28s ease'}}>
                                                         {kasirSubItems.map(sub => (
                                                             <button
                                                                 key={sub.id}
@@ -19475,6 +20285,8 @@
                         {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='cashier')?.readOnly} authSession={authSession} onNavigateToAdd={() => setActiveTab('add')} isOwner={isOwner} />)}
                         {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} items={inventoryData} readOnly={menuItems.find(m=>m.id==='history')?.readOnly} isOwner={isOwner} authSession={authSession} defaultOpenTransactionId={pendingTransactionId} onClearPendingTransaction={() => setPendingTransactionId(null)} />)}
                         {activeTab === 'rekap_barang' && (<RekapBarangView user={user} currentProfile={currentProfile} settings={settingsData} />)}
+                        {activeTab === 'laporan_lr' && (<LaporanLabaRugiView user={user} currentProfile={currentProfile} />)}
+                        {activeTab === 'analitik' && (<AnalitikView user={user} currentProfile={currentProfile} />)}
                         {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} settings={settingsData} readOnly={menuItems.find(m=>m.id==='purchases')?.readOnly} authSession={authSession} defaultOpenPurchaseId={pendingPurchaseId} onClearPendingPurchase={() => setPendingPurchaseId(null)} onBackFromDetail={() => setActiveTab('list')} />)}
                         {activeTab === 'cashbook' && (<CashBookView user={user} currentProfile={currentProfile} showToast={showToast} readOnly={menuItems.find(m=>m.id==='cashbook')?.readOnly} />)}
                         {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='list')?.readOnly} isOwner={isOwner} onNavigateToPurchases={(purchaseId, returnItem) => { setPendingPurchaseId(purchaseId); if (returnItem) { setReturnDetailItem(returnItem); setReturnInitialTab('riwayat'); } setActiveTab('purchases'); }} onNavigateToHistory={(transactionId) => { setPendingTransactionId(transactionId); setActiveTab('history'); }} returnDetailItem={returnDetailItem} onClearReturnDetailItem={() => { setReturnDetailItem(null); setReturnInitialTab(null); }} returnInitialTab={returnInitialTab} />)}
