@@ -1,0 +1,9 @@
+{
+  "name": "kasir-toko-husna",
+  "version": "1.0.0",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "firebase-admin": "^12.0.0"
+  }
+}
