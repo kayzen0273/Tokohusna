@@ -1,6 +1,39 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+    <!-- DIAGNOSTIC: tampilkan error di layar -->
+    <script>
+    (function(){
+        var panel = null;
+        function showPanel(msg, color){
+            if(!panel){
+                panel = document.createElement('div');
+                panel.id = '__diag__';
+                panel.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999999;padding:12px 16px;font-family:monospace;font-size:13px;line-height:1.5;max-height:60vh;overflow:auto;word-break:break-word;';
+                document.body ? document.body.appendChild(panel) : document.addEventListener('DOMContentLoaded', function(){ document.body.appendChild(panel); });
+            }
+            panel.style.background = color || '#1e1e1e';
+            panel.innerHTML += '<div style="color:#f87171;border-bottom:1px solid #333;padding-bottom:6px;margin-bottom:6px">' + msg + '</div>';
+        }
+        window.onerror = function(msg, src, line, col, err){
+            showPanel('❌ JS Error: ' + msg + '<br>File: ' + (src||'').split('/').pop() + ' line ' + line, '#1a0000');
+            return false;
+        };
+        window.addEventListener('unhandledrejection', function(e){
+            showPanel('❌ Promise Error: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)), '#1a0000');
+        });
+        // Cek backend setelah halaman load
+        window.addEventListener('load', function(){
+            fetch('/api/health').then(function(r){ return r.json(); }).then(function(d){
+                console.log('[Proxy] Backend OK:', d);
+                var el = document.getElementById('__diag__');
+                if(el) el.innerHTML = '<div style="color:#4ade80;padding:4px">✅ Backend OK — ' + (d.project||'') + '</div>' + el.innerHTML;
+            }).catch(function(err){
+                showPanel('❌ Backend TIDAK bisa dijangkau: ' + err.message + '<br>Pastikan FIREBASE_SERVICE_ACCOUNT sudah diisi di Vercel → Settings → Env Vars', '#0a1a00');
+            });
+        });
+    })();
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sistem Kasir Toko Husna (V71 - Mode Offline dengan Sinkronisasi Otomatis)</title>
