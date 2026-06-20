@@ -1,7 +1,5 @@
 {
   "version": 2,
-  "buildCommand": "",
-  "outputDirectory": ".",
   "functions": {
     "api/index.js": {
       "maxDuration": 60
