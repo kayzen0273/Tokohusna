@@ -5,6 +5,242 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sistem Kasir Toko Husna (V71 - Mode Offline dengan Sinkronisasi Otomatis)</title>
     
+    <style>
+        html, body { overscroll-behavior-y: none; }
+        body { font-family: 'Inter', sans-serif; background-color: #ffffff; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        .slide-up { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+        .pop-in { animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .slide-in-right { animation: slideInRight 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes popIn { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
+        @keyframes slideInRight { from { transform: translateX(100%); opacity: 0.6; } to { transform: translateX(0); opacity: 1; } }
+        .tx-detail-row { display: flex; flex-direction: column; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+        .tx-detail-row:last-child { border-bottom: none; }
+        .tx-detail-label { font-size: 11px; color: #0f172a; margin-bottom: 3px; }
+        .tx-detail-value { font-size: 13.5px; color: #0f172a; font-weight: 500; }
+        .tx-section-title { font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 8px; }
+        .tx-items-table-header { display: flex; font-size: 11px; font-weight: 700; color: #0f172a; padding-bottom: 8px; border-bottom: 1.5px solid #0f172a; }
+        .tx-items-row { display: flex; align-items: flex-start; padding: 10px 0; border-bottom: 1.5px solid #0f172a; }
+        .typing-dot { height: 6px; width: 6px; background-color: #0ea5e9; border-radius: 50%; display: inline-block; animation: typing 1.4s infinite ease-in-out both; margin: 0 2px; }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes typing { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05); }
+        
+        /* Kasir Decorations Animations */
+        @keyframes twinkle { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+        .sidebar-sub-item.active { background: #fff !important; color: #19737c !important; }
+        .kasir-pattern {
+            background-color: #ffffff;
+            background-image: none;
+        }
+
+        .font-arab { font-family: 'Amiri', serif; }
+
+        /* Receipt Tag Style */
+        .receipt-tag {
+            width: 26px; height: 36px;
+            background: linear-gradient(135deg, #f8fafc 60%, #e0f2fe);
+            border: 1.5px solid #bae6fd;
+            border-radius: 3px 3px 3px 3px;
+            position: relative;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+            box-shadow: 0 4px 8px rgba(14,165,233,0.15);
+        }
+        .receipt-tag::before {
+            content: '';
+            position: absolute;
+            top: -1px; left: 3px; right: 3px;
+            height: 6px;
+            background: repeating-linear-gradient(90deg, #7dd3fc 0px, #7dd3fc 2px, transparent 2px, transparent 4px);
+        }
+        .receipt-tag-line { width: 16px; height: 1.5px; background: #94a3b8; border-radius: 1px; }
+        .receipt-tag-line.short { width: 10px; }
+
+        /* Coin Style */
+        .coin-decor {
+            width: 28px; height: 28px;
+            background: radial-gradient(circle at 35% 35%, #fde68a, #f59e0b, #d97706);
+            border-radius: 50%;
+            border: 2px solid #fbbf24;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: 900; color: #92400e;
+            box-shadow: 0 3px 8px rgba(245,158,11,0.35), inset 0 1px 0 rgba(255,255,255,0.3);
+        }
+
+        /* FIREWORKS STYLE */
+        .firework-particle { position: fixed; pointer-events: none; border-radius: 50%; z-index: 9999; animation: firework-fade 0.8s ease-out forwards; }
+        @keyframes firework-fade { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(0); opacity: 0; } }
+        .type-effect-wrapper { display: inline-block; overflow: hidden; white-space: nowrap; vertical-align: bottom; max-width: 0; animation: revealText 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+        @keyframes revealText { 0% { max-width: 0; opacity: 0; } 100% { max-width: 100%; opacity: 1; } }
+        
+        /* Checkmark Animation */
+        .checkmark-circle { stroke-dasharray: 166; stroke-dashoffset: 166; stroke-width: 2; stroke-miterlimit: 10; stroke: #22c55e; fill: none; animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards; }
+        .checkmark { width: 56px; height: 56px; border-radius: 50%; display: block; stroke-width: 2; stroke: #fff; stroke-miterlimit: 10; margin: 10% auto; box-shadow: inset 0px 0px 0px #22c55e; animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
+        .checkmark__check { transform-origin: 50% 50%; stroke-dasharray: 48; stroke-dashoffset: 48; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards; }
+        @keyframes stroke { 100% { stroke-dashoffset: 0; } }
+        @keyframes scale { 0%, 100% { transform: none; } 50% { transform: scale3d(1.1, 1.1, 1); } }
+        @keyframes fill { 100% { box-shadow: inset 0px 0px 0px 30px #22c55e; } }
+        
+        /* Toggle Switch */
+        .toggle-checkbox:checked { right: 0; border-color: #0ea5e9; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #0ea5e9; }
+
+        /* AUTH SCREEN STYLES */
+        .auth-bg {
+            min-height: 100vh;
+            background: #ffffff;
+            position: relative;
+            overflow: hidden;
+        }
+        .auth-bg::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: none;
+        }
+        .auth-card {
+            background: #ffffff;
+            border-radius: 24px;
+            box-shadow: 0 4px 32px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06);
+        }
+        .auth-input {
+            width: 100%;
+            padding: 12px 16px 12px 44px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            background: #f8fafc;
+            color: #1e293b;
+            outline: none;
+            font-family: 'Inter', sans-serif;
+        }
+        .auth-input:focus { border-color: #0ea5e9; background: #fff; box-shadow: 0 0 0 4px rgba(14,165,233,0.1); }
+        .auth-input::placeholder { color: #94a3b8; font-weight: 400; }
+        .auth-btn-primary {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #0ea5e9, #0284c7);
+            color: white;
+            font-weight: 700;
+            font-size: 15px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+            letter-spacing: 0.3px;
+        }
+        .auth-btn-primary:hover { background: linear-gradient(135deg, #0284c7, #0369a1); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(14,165,233,0.35); }
+        .auth-btn-primary:active { transform: translateY(0); }
+        .auth-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+        .auth-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            pointer-events: none;
+        }
+        @keyframes authFadeIn { from { opacity: 0; transform: translateY(24px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        .auth-fade-in { animation: authFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes pulse-ring { 0% { transform: scale(0.95); opacity: 0.7; } 70% { transform: scale(1.15); opacity: 0; } 100% { transform: scale(1.15); opacity: 0; } }
+        .pulse-ring::before { content: ''; position: absolute; inset: -6px; border-radius: 50%; border: 3px solid rgba(14,165,233,0.4); animation: pulse-ring 2s ease-out infinite; }
+        .auth-tab { padding: 8px 20px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; transition: all 0.2s; border: none; background: transparent; }
+        .auth-tab.active { background: #0ea5e9; color: white; box-shadow: 0 4px 12px rgba(14,165,233,0.3); }
+        .auth-tab:not(.active) { color: #64748b; }
+        .auth-tab:not(.active):hover { background: #f1f5f9; color: #334155; }
+        .otp-input { width: 48px; height: 56px; text-align: center; font-size: 22px; font-weight: 800; border: 2px solid #e2e8f0; border-radius: 12px; background: #f8fafc; color: #1e293b; transition: all 0.2s; outline: none; font-family: 'Inter', sans-serif; }
+        .otp-input:focus { border-color: #0ea5e9; box-shadow: 0 0 0 4px rgba(14,165,233,0.1); background: white; }
+        .auth-floating-star { position: absolute; pointer-events: none; animation: authStar 4s ease-in-out infinite; }
+        @keyframes authStar { 0%,100% { opacity:0.3; transform: scale(0.8) rotate(0deg); } 50% { opacity:0.8; transform: scale(1.2) rotate(15deg); } }
+
+        /* Expiry Banner - slide from top */
+        @keyframes expBannerIn  { from { transform: translateY(-110%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes expBannerOut { from { transform: translateY(0);     opacity: 1; } to { transform: translateY(-110%); opacity: 0; } }
+        .exp-banner-enter { animation: expBannerIn  0.45s cubic-bezier(0.16,1,0.3,1) forwards; }
+        .exp-banner-exit  { animation: expBannerOut 0.4s  ease-in            forwards; }
+        body.filter-panel-open .mobile-topbar { display: none !important; }
+        body.tx-detail-open .mobile-topbar { display: none !important; }
+        body.cashier-session-open .mobile-topbar { display: none !important; }
+    </style>
+</head>
+<body class="relative">
+    <!-- ═══════════════════════════════════════════════════════════════════
+         BOOT OVERLAY — tampil instan tanpa menunggu CDN apapun
+         Ditaruh paling atas di <body> + CSS inline, supaya browser bisa
+         langsung mengecat ini begitu HTML-nya sampai, walau koneksi lambat.
+         Dihapus otomatis oleh aplikasi React setelah berhasil render.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <div id="boot-loading" style="position:fixed;inset:0;z-index:99999;background:#ffffff;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;text-align:center;padding:24px;">
+        <style>
+            @keyframes bootSpin { to { transform: rotate(360deg); } }
+            #boot-spinner { width:40px;height:40px;border-radius:50%;border:4px solid #e2e8f0;border-top-color:#0ea5e9;animation:bootSpin 0.8s linear infinite; }
+        </style>
+        <div id="boot-spinner"></div>
+        <div id="boot-text" style="color:#0f172a;font-size:14px;font-weight:600;">Memuat Sistem Kasir Husna…</div>
+        <div id="boot-subtext" style="color:#64748b;font-size:12.5px;max-width:280px;"></div>
+        <button id="boot-reload-btn" onclick="location.reload()" style="display:none;margin-top:6px;padding:10px 20px;background:#0ea5e9;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">Muat Ulang</button>
+    </div>
+    <script>
+    (function () {
+        var startedAt = Date.now();
+        var bootEl = document.getElementById('boot-loading');
+        var textEl = document.getElementById('boot-text');
+        var subEl  = document.getElementById('boot-subtext');
+        var btnEl  = document.getElementById('boot-reload-btn');
+        var doneOrFailed = false;
+
+        function showSlowHint() {
+            if (doneOrFailed) return;
+            subEl.textContent = 'Koneksi lambat terdeteksi, mohon tunggu sebentar lagi…';
+        }
+        function showError(msg) {
+            if (doneOrFailed) return;
+            doneOrFailed = true;
+            if (bootEl) bootEl.style.display = 'flex';
+            document.getElementById('boot-spinner').style.display = 'none';
+            textEl.textContent = 'Gagal memuat aplikasi';
+            subEl.textContent = msg || 'Terjadi kesalahan. Coba periksa koneksi internet Anda lalu muat ulang.';
+            btnEl.style.display = 'inline-block';
+        }
+
+        // Resource (script/link) gagal dimuat (mis. CDN down / koneksi putus)
+        window.addEventListener('error', function (e) {
+            var tgt = e.target;
+            if (tgt && tgt.tagName && (tgt.tagName === 'SCRIPT' || tgt.tagName === 'LINK')) {
+                showError('Gagal memuat salah satu file pendukung (' + (tgt.src || tgt.href || 'resource') + '). Periksa koneksi internet Anda.');
+            } else if (e.message) {
+                showError('Terjadi error: ' + e.message);
+            }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function (e) {
+            console.warn('Unhandled promise rejection:', e.reason);
+        });
+
+        setTimeout(showSlowHint, 7000);
+        setTimeout(function () {
+            if (!doneOrFailed) showError('Proses masih berjalan terlalu lama. Koneksi mungkin sangat lambat — coba muat ulang atau pindah ke WiFi/sinyal yang lebih stabil.');
+        }, 25000);
+
+        // Dipanggil oleh aplikasi React setelah berhasil mount
+        window.__bootDone = function () {
+            doneOrFailed = true;
+            if (bootEl) bootEl.remove();
+        };
+    })();
+    </script>
+
+    <div id="root" class="relative z-10"></div>
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -60,8 +296,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     
     <!-- Fonts & Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Amiri:wght@400;700&family=Courier+Prime:wght@400;700&family=Caveat:wght@400;500;600;700&family=Kalam:wght@400;700&family=Dancing+Script:wght@400;600;700&family=Quicksand:wght@400;600;700&family=Indie+Flower&family=Patrick+Hand&family=Pacifico&family=Permanent+Marker&family=Special+Elite&family=Shadows+Into+Light&family=Amatic+SC:wght@400;700&family=Gloria+Hallelujah&family=Lobster&family=Fredoka+One&family=Comfortaa:wght@400;600;700&family=Nunito:wght@400;600;700;800&family=Righteous&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Amiri:wght@400;700&family=Courier+Prime:wght@400;700&family=Caveat:wght@400;500;600;700&family=Kalam:wght@400;700&family=Dancing+Script:wght@400;600;700&family=Quicksand:wght@400;600;700&family=Indie+Flower&family=Patrick+Hand&family=Pacifico&family=Permanent+Marker&family=Special+Elite&family=Shadows+Into+Light&family=Amatic+SC:wght@400;700&family=Gloria+Hallelujah&family=Lobster&family=Fredoka+One&family=Comfortaa:wght@400;600;700&family=Nunito:wght@400;600;700;800&family=Righteous&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript>    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Amiri:wght@400;700&family=Courier+Prime:wght@400;700&family=Caveat:wght@400;500;600;700&family=Kalam:wght@400;700&family=Dancing+Script:wght@400;600;700&family=Quicksand:wght@400;600;700&family=Indie+Flower&family=Patrick+Hand&family=Pacifico&family=Permanent+Marker&family=Special+Elite&family=Shadows+Into+Light&family=Amatic+SC:wght@400;700&family=Gloria+Hallelujah&family=Lobster&family=Fredoka+One&family=Comfortaa:wght@400;600;700&family=Nunito:wght@400;600;700;800&family=Righteous&display=swap" rel="stylesheet"></noscript>
 
     <!-- Fuse.js -->
     <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
@@ -538,175 +776,6 @@
     })();
     </script>
 
-    <style>
-        html, body { overscroll-behavior-y: none; }
-        body { font-family: 'Inter', sans-serif; background-color: #ffffff; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        .fade-in { animation: fadeIn 0.4s ease-out; }
-        .slide-up { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
-        .pop-in { animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        .slide-in-right { animation: slideInRight 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes popIn { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
-        @keyframes slideInRight { from { transform: translateX(100%); opacity: 0.6; } to { transform: translateX(0); opacity: 1; } }
-        .tx-detail-row { display: flex; flex-direction: column; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
-        .tx-detail-row:last-child { border-bottom: none; }
-        .tx-detail-label { font-size: 11px; color: #0f172a; margin-bottom: 3px; }
-        .tx-detail-value { font-size: 13.5px; color: #0f172a; font-weight: 500; }
-        .tx-section-title { font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 8px; }
-        .tx-items-table-header { display: flex; font-size: 11px; font-weight: 700; color: #0f172a; padding-bottom: 8px; border-bottom: 1.5px solid #0f172a; }
-        .tx-items-row { display: flex; align-items: flex-start; padding: 10px 0; border-bottom: 1.5px solid #0f172a; }
-        .typing-dot { height: 6px; width: 6px; background-color: #0ea5e9; border-radius: 50%; display: inline-block; animation: typing 1.4s infinite ease-in-out both; margin: 0 2px; }
-        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
-        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
-        @keyframes typing { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
-        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05); }
-        
-        /* Kasir Decorations Animations */
-        @keyframes twinkle { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
-        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-
-        .sidebar-sub-item.active { background: #fff !important; color: #19737c !important; }
-        .kasir-pattern {
-            background-color: #ffffff;
-            background-image: none;
-        }
-
-        .font-arab { font-family: 'Amiri', serif; }
-
-        /* Receipt Tag Style */
-        .receipt-tag {
-            width: 26px; height: 36px;
-            background: linear-gradient(135deg, #f8fafc 60%, #e0f2fe);
-            border: 1.5px solid #bae6fd;
-            border-radius: 3px 3px 3px 3px;
-            position: relative;
-            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-            box-shadow: 0 4px 8px rgba(14,165,233,0.15);
-        }
-        .receipt-tag::before {
-            content: '';
-            position: absolute;
-            top: -1px; left: 3px; right: 3px;
-            height: 6px;
-            background: repeating-linear-gradient(90deg, #7dd3fc 0px, #7dd3fc 2px, transparent 2px, transparent 4px);
-        }
-        .receipt-tag-line { width: 16px; height: 1.5px; background: #94a3b8; border-radius: 1px; }
-        .receipt-tag-line.short { width: 10px; }
-
-        /* Coin Style */
-        .coin-decor {
-            width: 28px; height: 28px;
-            background: radial-gradient(circle at 35% 35%, #fde68a, #f59e0b, #d97706);
-            border-radius: 50%;
-            border: 2px solid #fbbf24;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 11px; font-weight: 900; color: #92400e;
-            box-shadow: 0 3px 8px rgba(245,158,11,0.35), inset 0 1px 0 rgba(255,255,255,0.3);
-        }
-
-        /* FIREWORKS STYLE */
-        .firework-particle { position: fixed; pointer-events: none; border-radius: 50%; z-index: 9999; animation: firework-fade 0.8s ease-out forwards; }
-        @keyframes firework-fade { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(0); opacity: 0; } }
-        .type-effect-wrapper { display: inline-block; overflow: hidden; white-space: nowrap; vertical-align: bottom; max-width: 0; animation: revealText 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-        @keyframes revealText { 0% { max-width: 0; opacity: 0; } 100% { max-width: 100%; opacity: 1; } }
-        
-        /* Checkmark Animation */
-        .checkmark-circle { stroke-dasharray: 166; stroke-dashoffset: 166; stroke-width: 2; stroke-miterlimit: 10; stroke: #22c55e; fill: none; animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards; }
-        .checkmark { width: 56px; height: 56px; border-radius: 50%; display: block; stroke-width: 2; stroke: #fff; stroke-miterlimit: 10; margin: 10% auto; box-shadow: inset 0px 0px 0px #22c55e; animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
-        .checkmark__check { transform-origin: 50% 50%; stroke-dasharray: 48; stroke-dashoffset: 48; animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards; }
-        @keyframes stroke { 100% { stroke-dashoffset: 0; } }
-        @keyframes scale { 0%, 100% { transform: none; } 50% { transform: scale3d(1.1, 1.1, 1); } }
-        @keyframes fill { 100% { box-shadow: inset 0px 0px 0px 30px #22c55e; } }
-        
-        /* Toggle Switch */
-        .toggle-checkbox:checked { right: 0; border-color: #0ea5e9; }
-        .toggle-checkbox:checked + .toggle-label { background-color: #0ea5e9; }
-
-        /* AUTH SCREEN STYLES */
-        .auth-bg {
-            min-height: 100vh;
-            background: #ffffff;
-            position: relative;
-            overflow: hidden;
-        }
-        .auth-bg::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background-image: none;
-        }
-        .auth-card {
-            background: #ffffff;
-            border-radius: 24px;
-            box-shadow: 0 4px 32px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06);
-        }
-        .auth-input {
-            width: 100%;
-            padding: 12px 16px 12px 44px;
-            border: 2px solid #e2e8f0;
-            border-radius: 12px;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.2s;
-            background: #f8fafc;
-            color: #1e293b;
-            outline: none;
-            font-family: 'Inter', sans-serif;
-        }
-        .auth-input:focus { border-color: #0ea5e9; background: #fff; box-shadow: 0 0 0 4px rgba(14,165,233,0.1); }
-        .auth-input::placeholder { color: #94a3b8; font-weight: 400; }
-        .auth-btn-primary {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #0ea5e9, #0284c7);
-            color: white;
-            font-weight: 700;
-            font-size: 15px;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-family: 'Inter', sans-serif;
-            letter-spacing: 0.3px;
-        }
-        .auth-btn-primary:hover { background: linear-gradient(135deg, #0284c7, #0369a1); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(14,165,233,0.35); }
-        .auth-btn-primary:active { transform: translateY(0); }
-        .auth-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
-        .auth-orb {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(80px);
-            pointer-events: none;
-        }
-        @keyframes authFadeIn { from { opacity: 0; transform: translateY(24px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
-        .auth-fade-in { animation: authFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        @keyframes pulse-ring { 0% { transform: scale(0.95); opacity: 0.7; } 70% { transform: scale(1.15); opacity: 0; } 100% { transform: scale(1.15); opacity: 0; } }
-        .pulse-ring::before { content: ''; position: absolute; inset: -6px; border-radius: 50%; border: 3px solid rgba(14,165,233,0.4); animation: pulse-ring 2s ease-out infinite; }
-        .auth-tab { padding: 8px 20px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; transition: all 0.2s; border: none; background: transparent; }
-        .auth-tab.active { background: #0ea5e9; color: white; box-shadow: 0 4px 12px rgba(14,165,233,0.3); }
-        .auth-tab:not(.active) { color: #64748b; }
-        .auth-tab:not(.active):hover { background: #f1f5f9; color: #334155; }
-        .otp-input { width: 48px; height: 56px; text-align: center; font-size: 22px; font-weight: 800; border: 2px solid #e2e8f0; border-radius: 12px; background: #f8fafc; color: #1e293b; transition: all 0.2s; outline: none; font-family: 'Inter', sans-serif; }
-        .otp-input:focus { border-color: #0ea5e9; box-shadow: 0 0 0 4px rgba(14,165,233,0.1); background: white; }
-        .auth-floating-star { position: absolute; pointer-events: none; animation: authStar 4s ease-in-out infinite; }
-        @keyframes authStar { 0%,100% { opacity:0.3; transform: scale(0.8) rotate(0deg); } 50% { opacity:0.8; transform: scale(1.2) rotate(15deg); } }
-
-        /* Expiry Banner - slide from top */
-        @keyframes expBannerIn  { from { transform: translateY(-110%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes expBannerOut { from { transform: translateY(0);     opacity: 1; } to { transform: translateY(-110%); opacity: 0; } }
-        .exp-banner-enter { animation: expBannerIn  0.45s cubic-bezier(0.16,1,0.3,1) forwards; }
-        .exp-banner-exit  { animation: expBannerOut 0.4s  ease-in            forwards; }
-        body.filter-panel-open .mobile-topbar { display: none !important; }
-        body.tx-detail-open .mobile-topbar { display: none !important; }
-        body.cashier-session-open .mobile-topbar { display: none !important; }
-    </style>
-</head>
-<body class="relative">
-    <div id="root" class="relative z-10"></div>
 
     <!-- React App (Babel) -->
     <script type="text/babel">
@@ -20747,6 +20816,7 @@
         };
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
+        if (window.__bootDone) window.__bootDone();
     </script>
 <audio id="chaching-sound" src="cha-ching.mp3" preload="auto"></audio>
 </body>
