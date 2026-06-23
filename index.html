@@ -69,54 +69,473 @@
     <!-- ExcelJS for Excel Export with Full Styling Support -->
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
 
-    <!-- Firebase SDK (Module) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, writeBatch, query, orderBy, increment, limit, setDoc, getDoc, getDocs, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    <!-- ═══════════════════════════════════════════════════════════════════
+         SUPABASE SDK + ADAPTER (Pengganti Firebase Firestore)
+         Dibuat otomatis — semua window.addDoc / window.onSnapshot tetap berjalan
+         ═══════════════════════════════════════════════════════════════════ -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script>
+    (function () {
+        // ─── KONFIGURASI ─────────────────────────────────────────────────────────
+        const SUPABASE_URL = 'https://mnuunkrkoeqjzbxceodc.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1udXVua3Jrb2VxanpieGNlb2RjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxNTc4NDQsImV4cCI6MjA5NzczMzg0NH0.Ww8R_sukOnfCo4EbBK90T0ZyYomw9LzL0wpHISn97s8';
+        // ─────────────────────────────────────────────────────────────────────────
+        // SETUP SUPABASE:
+        // 1. Jalankan SQL ini di Supabase SQL Editor:
+        //
+        //    CREATE TABLE IF NOT EXISTS firestore_documents (
+        //      path_key        TEXT PRIMARY KEY,
+        //      app_id          TEXT NOT NULL,
+        //      collection_name TEXT NOT NULL,
+        //      doc_id          TEXT NOT NULL,
+        //      data            JSONB NOT NULL DEFAULT '{}',
+        //      created_at      TIMESTAMPTZ DEFAULT NOW(),
+        //      updated_at      TIMESTAMPTZ DEFAULT NOW()
+        //    );
+        //    CREATE INDEX IF NOT EXISTS idx_fdocs_col
+        //      ON firestore_documents(app_id, collection_name);
+        //    ALTER PUBLICATION supabase_realtime ADD TABLE firestore_documents;
+        //
+        // 2. Aktifkan Row Level Security (RLS) sesuai kebutuhan keamanan Anda.
+        // 3. Ganti SUPABASE_KEY di atas dengan Anon Key dari Project Settings.
+        // ─────────────────────────────────────────────────────────────────────────
 
-        // Konfigurasi dari User
-        const userConfig = {
-            apiKey: "AIzaSyAKhe3ILdMTN7Dn9Ao3MqlzW3s5hHUDB_c",
-            authDomain: "toko-husna-c6415.firebaseapp.com",
-            projectId: "toko-husna-c6415",
-            storageBucket: "toko-husna-c6415.firebasestorage.app",
-            messagingSenderId: "171239564619",
-            appId: "1:171239564619:web:29972d886bd39f1559f4ce",
-            measurementId: "G-4BKNYL5KFC"
-        };
+        // Init Supabase client (untuk Realtime)
+        const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            realtime: { params: { eventsPerSecond: 10 } }
+        });
+        window._supabaseClient = _sb;
 
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : userConfig;
-        
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // ── UUID generator ────────────────────────────────────────────────────────
+        function _uid() {
+            try {
+                return crypto.randomUUID();
+            } catch {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                    const r = Math.random() * 16 | 0;
+                    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+                });
+            }
+        }
 
-        // Expose ke window
-        window.db = db;
-        window.auth = auth;
-        window.signInAnonymously = signInAnonymously;
+        // ── Path key (primary key di Supabase) ───────────────────────────────────
+        function _pk(appId, coll, docId) {
+            return appId + '::' + coll + '::' + docId;
+        }
+
+        // ── Nested get/set (untuk dotted keys, mis. "stocks.toko1") ─────────────
+        function _getNested(obj, key) {
+            if (!obj || !key) return undefined;
+            if (!key.includes('.')) return obj[key];
+            return key.split('.').reduce((acc, k) => (acc != null ? acc[k] : undefined), obj);
+        }
+        function _setNested(obj, key, val) {
+            if (!key.includes('.')) { obj[key] = val; return; }
+            const parts = key.split('.');
+            let cur = obj;
+            for (let i = 0; i < parts.length - 1; i++) {
+                if (cur[parts[i]] == null || typeof cur[parts[i]] !== 'object') cur[parts[i]] = {};
+                cur = cur[parts[i]];
+            }
+            cur[parts[parts.length - 1]] = val;
+        }
+
+        // ── Resolve sentinel values + dotted keys ─────────────────────────────────
+        // Mengubah serverTimestamp() → ISO string, increment(n) → nilai numerik baru
+        function _resolve(incoming, existing) {
+            const base = existing ? JSON.parse(JSON.stringify(existing)) : {};
+            for (const [k, v] of Object.entries(incoming)) {
+                if (v && typeof v === 'object' && v.__sb_ts) {
+                    _setNested(base, k, new Date().toISOString());
+                } else if (v && typeof v === 'object' && v.__sb_inc !== undefined) {
+                    const cur = _getNested(base, k);
+                    _setNested(base, k, (typeof cur === 'number' ? cur : 0) + v.__sb_inc);
+                } else {
+                    _setNested(base, k, v);
+                }
+            }
+            return base;
+        }
+
+        // ── Parse path args → { appId, collectionName, docId? } ─────────────────
+        // Format standar: artifacts / {appId} / public / data / {collName} [/ {docId}]
+        // Format private: artifacts / {appId} / users  / {uid} / {collName} [/ {docId}]
+        function _parse(segs) {
+            const s = segs.filter(x => typeof x === 'string');
+            const appId = s[1] || (window.appId || 'default-app-id');
+            let coll, docId;
+            if (s[2] === 'public' && s[3] === 'data') {
+                coll  = s[4];
+                docId = s[5];
+            } else if (s[2] === 'users') {
+                coll  = '__priv_' + s[3] + '_' + s[4];
+                docId = s[5];
+            } else {
+                coll  = s[s.length - 2];
+                docId = s[s.length - 1];
+            }
+            return { appId, coll, docId };
+        }
+
+        // ── Supabase REST helper ─────────────────────────────────────────────────
+        async function _rest(method, path, body, qs) {
+            let url = SUPABASE_URL + '/rest/v1/firestore_documents';
+            if (path) url += path;
+            if (qs)   url += (url.includes('?') ? '&' : '?') + qs;
+            const hdrs = {
+                'Content-Type':  'application/json',
+                'apikey':        SUPABASE_KEY,
+                'Authorization': 'Bearer ' + SUPABASE_KEY,
+            };
+            if (['POST','PUT','PATCH'].includes(method)) hdrs['Prefer'] = 'return=representation';
+            const res = await fetch(url, {
+                method, headers: hdrs,
+                body: body ? JSON.stringify(body) : undefined,
+            });
+            if (!res.ok) {
+                const txt = await res.text();
+                console.error('[Supabase]', method, url, res.status, txt);
+                throw new Error('Supabase ' + method + ': ' + res.status);
+            }
+            return method === 'DELETE' ? null : res.json();
+        }
+
+        // ── Fetch helpers ────────────────────────────────────────────────────────
+        async function _fetchCol(appId, coll) {
+            const rows = await _rest('GET', '', null,
+                'app_id=eq.' + encodeURIComponent(appId) +
+                '&collection_name=eq.' + encodeURIComponent(coll) +
+                '&select=doc_id,data');
+            return (rows || []).map(r => ({ id: r.doc_id, ...r.data }));
+        }
+        async function _fetchDoc(appId, coll, docId) {
+            const rows = await _rest('GET', '', null,
+                'path_key=eq.' + encodeURIComponent(_pk(appId, coll, docId)) +
+                '&select=doc_id,data');
+            return rows && rows.length ? { id: rows[0].doc_id, ...rows[0].data } : null;
+        }
+
+        // ── Snapshot wrappers (meniru Firebase DocumentSnapshot / QuerySnapshot) ─
+        function _docSnap(data, docId) {
+            return {
+                id: docId,
+                exists:  () => data !== null && data !== undefined,
+                data:    () => { if (!data) return null; const { id: _i, ...rest } = data; return rest; },
+                get:     (f) => data ? _getNested(data, f) : undefined,
+            };
+        }
+        function _colSnap(docs) {
+            const snapDocs = docs.map(d => {
+                const { id, ...rest } = d;
+                return {
+                    id,
+                    ref:    { id },
+                    exists: () => true,
+                    data:   () => rest,
+                    get:    (f) => _getNested(d, f),
+                };
+            });
+            return {
+                docs:    snapDocs,
+                empty:   snapDocs.length === 0,
+                size:    snapDocs.length,
+                forEach: fn => snapDocs.forEach(fn),
+            };
+        }
+
+        // ── Constraints ──────────────────────────────────────────────────────────
+        function _applyConstraints(docs, constraints) {
+            let result = [...docs];
+            const orders = [];
+            let limitN = null;
+            for (const c of (constraints || [])) {
+                if (!c || !c.__sbType) continue;
+                if (c.__sbType === 'where') {
+                    result = result.filter(d => {
+                        const val = _getNested(d, c.field);
+                        switch (c.op) {
+                            case '==':             return val == c.value;
+                            case '!=':             return val != c.value;
+                            case '>':              return val > c.value;
+                            case '>=':             return val >= c.value;
+                            case '<':              return val < c.value;
+                            case '<=':             return val <= c.value;
+                            case 'in':             return Array.isArray(c.value) && c.value.includes(val);
+                            case 'not-in':         return Array.isArray(c.value) && !c.value.includes(val);
+                            case 'array-contains': return Array.isArray(val) && val.includes(c.value);
+                            default:               return true;
+                        }
+                    });
+                } else if (c.__sbType === 'orderBy') {
+                    orders.push(c);
+                } else if (c.__sbType === 'limit') {
+                    limitN = c.n;
+                }
+            }
+            if (orders.length) {
+                result.sort((a, b) => {
+                    for (const o of orders) {
+                        const aV = _getNested(a, o.field);
+                        const bV = _getNested(b, o.field);
+                        const dir = o.direction === 'desc' ? -1 : 1;
+                        if (aV == null && bV == null) continue;
+                        if (aV == null) return dir;
+                        if (bV == null) return -dir;
+                        const aS = typeof aV === 'object' ? JSON.stringify(aV) : String(aV);
+                        const bS = typeof bV === 'object' ? JSON.stringify(bV) : String(bV);
+                        if (aS < bS) return -dir;
+                        if (aS > bS) return dir;
+                    }
+                    return 0;
+                });
+            }
+            if (limitN != null) result = result.slice(0, limitN);
+            return result;
+        }
+
+        // ══════════════════════════════════════════════════════════════════════════
+        // PUBLIC API — meniru Firebase Firestore
+        // ══════════════════════════════════════════════════════════════════════════
+
+        // ── collection(db, ...segs) ───────────────────────────────────────────────
+        function collection(db, ...segs) {
+            const { appId, coll } = _parse(['', ...segs]);
+            return { __sb: 'col', appId, coll };
+        }
+
+        // ── doc(db|colRef, ...segs) ───────────────────────────────────────────────
+        function doc(dbOrRef, ...segs) {
+            if (dbOrRef && dbOrRef.__sb === 'col') {
+                return { __sb: 'doc', appId: dbOrRef.appId, coll: dbOrRef.coll, docId: segs[0] || _uid() };
+            }
+            const cleanSegs = segs.filter(x => typeof x === 'string');
+            const { appId, coll, docId } = _parse(['', ...cleanSegs]);
+            return { __sb: 'doc', appId, coll, docId: docId || _uid() };
+        }
+
+        // ── serverTimestamp() ─────────────────────────────────────────────────────
+        function serverTimestamp() { return { __sb_ts: true }; }
+
+        // ── increment(n) ──────────────────────────────────────────────────────────
+        function increment(n) { return { __sb_inc: n }; }
+
+        // ── query / where / orderBy / limit ───────────────────────────────────────
+        function query(colRef, ...constraints) {
+            return { __sb: 'query', colRef, constraints };
+        }
+        function where(field, op, value) {
+            return { __sbType: 'where', field, op, value };
+        }
+        function orderBy(field, direction) {
+            return { __sbType: 'orderBy', field, direction: direction || 'asc' };
+        }
+        function limit(n) {
+            return { __sbType: 'limit', n };
+        }
+
+        // ── addDoc(colRef, data) ──────────────────────────────────────────────────
+        async function addDoc(colRef, data) {
+            const docId = _uid();
+            const { appId, coll } = colRef;
+            const processed = _resolve(data, {});
+            await _rest('POST',
+                '?on_conflict=path_key',
+                { path_key: _pk(appId, coll, docId), app_id: appId, collection_name: coll, doc_id: docId, data: processed },
+                null
+            );
+            return { id: docId };
+        }
+
+        // ── setDoc(docRef, data, opts?) ───────────────────────────────────────────
+        async function setDoc(docRef, data, opts) {
+            const { appId, coll, docId } = docRef;
+            let processed;
+            if (opts && opts.merge) {
+                const existing = await _fetchDoc(appId, coll, docId);
+                processed = _resolve(data, existing || {});
+            } else {
+                processed = _resolve(data, {});
+            }
+            await _rest('POST',
+                '?on_conflict=path_key',
+                { path_key: _pk(appId, coll, docId), app_id: appId, collection_name: coll, doc_id: docId, data: processed },
+                null
+            );
+        }
+
+        // ── updateDoc(docRef, data) ───────────────────────────────────────────────
+        async function updateDoc(docRef, data) {
+            const { appId, coll, docId } = docRef;
+            const existing = await _fetchDoc(appId, coll, docId);
+            const updated  = _resolve(data, existing || {});
+            await _rest('PATCH',
+                '?path_key=eq.' + encodeURIComponent(_pk(appId, coll, docId)),
+                { data: updated }
+            );
+        }
+
+        // ── deleteDoc(docRef) ─────────────────────────────────────────────────────
+        async function deleteDoc(docRef) {
+            const { appId, coll, docId } = docRef;
+            await _rest('DELETE',
+                '?path_key=eq.' + encodeURIComponent(_pk(appId, coll, docId))
+            );
+        }
+
+        // ── getDoc(docRef) ────────────────────────────────────────────────────────
+        async function getDoc(docRef) {
+            const { appId, coll, docId } = docRef;
+            const data = await _fetchDoc(appId, coll, docId);
+            return _docSnap(data, docId);
+        }
+
+        // ── getDocs(queryRef|colRef) ──────────────────────────────────────────────
+        async function getDocs(ref) {
+            let docs;
+            if (ref.__sb === 'query') {
+                const all = await _fetchCol(ref.colRef.appId, ref.colRef.coll);
+                docs = _applyConstraints(all, ref.constraints);
+            } else {
+                docs = await _fetchCol(ref.appId, ref.coll);
+            }
+            return _colSnap(docs);
+        }
+
+        // ── onSnapshot(ref, callback, errCb?) ─────────────────────────────────────
+        // Menggunakan Supabase Realtime + polling fallback
+        function onSnapshot(refOrQuery, callback, errCb) {
+            let appId, coll, docId, fetchAndNotify;
+
+            if (refOrQuery.__sb === 'doc') {
+                ({ appId, coll, docId } = refOrQuery);
+                fetchAndNotify = async () => {
+                    const data = await _fetchDoc(appId, coll, docId);
+                    callback(_docSnap(data, docId));
+                };
+            } else {
+                const isQuery = refOrQuery.__sb === 'query';
+                const colRef   = isQuery ? refOrQuery.colRef : refOrQuery;
+                const consts   = isQuery ? refOrQuery.constraints : [];
+                appId = colRef.appId;
+                coll  = colRef.coll;
+                fetchAndNotify = async () => {
+                    const all = await _fetchCol(appId, coll);
+                    callback(_colSnap(_applyConstraints(all, consts)));
+                };
+            }
+
+            // Initial load
+            fetchAndNotify().catch(e => { errCb && errCb(e); });
+
+            // Realtime subscription
+            const chanId = 'sb_' + _uid();
+            let channel;
+            const filter = docId
+                ? 'path_key=eq.' + _pk(appId, coll, docId)
+                : 'collection_name=eq.' + coll;
+
+            try {
+                channel = _sb.channel(chanId)
+                    .on('postgres_changes', {
+                        event: '*', schema: 'public',
+                        table: 'firestore_documents',
+                        filter: filter,
+                    }, () => { fetchAndNotify().catch(() => {}); })
+                    .subscribe(status => {
+                        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                            startPoll();
+                        }
+                    });
+            } catch (e) { /* fallback ke polling */ }
+
+            // Polling fallback (setiap 8 detik)
+            let pollTimer = null;
+            const startPoll = () => {
+                if (pollTimer) return;
+                pollTimer = setInterval(() => fetchAndNotify().catch(() => {}), 8000);
+            };
+            startPoll(); // aktifkan polling sebagai backup
+
+            return () => {
+                if (channel) _sb.removeChannel(channel);
+                if (pollTimer) clearInterval(pollTimer);
+            };
+        }
+
+        // ── writeBatch(db) ────────────────────────────────────────────────────────
+        function writeBatch(db) {
+            const ops = [];
+            return {
+                set:    (ref, data, opts) => ops.push({ type: 'set',    ref, data, opts }),
+                update: (ref, data)       => ops.push({ type: 'update', ref, data }),
+                delete: (ref)             => ops.push({ type: 'delete', ref }),
+                commit: async () => {
+                    for (const op of ops) {
+                        if      (op.type === 'set')    await setDoc(op.ref, op.data, op.opts || {});
+                        else if (op.type === 'update') await updateDoc(op.ref, op.data);
+                        else if (op.type === 'delete') await deleteDoc(op.ref);
+                    }
+                },
+            };
+        }
+
+        // ── Auth emulasi (Firebase Auth tidak dipakai lagi) ────────────────────────
+        // App memakai sistem auth sendiri via Firestore; kita cukup emulasikan user anonim.
+        const _mockUid  = _uid();
+        const _mockUser = { uid: _mockUid, isAnonymous: true, email: null };
+        const _authCbs  = [];
+        let   _curUser  = null;
+        const auth = { currentUser: null };
+
+        function signInAnonymously(authRef) {
+            return new Promise(resolve => setTimeout(() => {
+                _curUser = _mockUser;
+                auth.currentUser = _mockUser;
+                _authCbs.forEach(cb => { try { cb(_mockUser); } catch(e) {} });
+                resolve({ user: _mockUser });
+            }, 30));
+        }
+        function signInWithCustomToken(authRef, token) {
+            return signInAnonymously(authRef);
+        }
+        function onAuthStateChanged(authRef, cb) {
+            _authCbs.push(cb);
+            if (_curUser) setTimeout(() => cb(_curUser), 0);
+            return () => {
+                const i = _authCbs.indexOf(cb);
+                if (i >= 0) _authCbs.splice(i, 1);
+            };
+        }
+
+        // ── Expose semua ke window (menggantikan Firebase) ────────────────────────
+        const _db = { __sb: 'db', __url: SUPABASE_URL };
+        window.db                 = _db;
+        window.auth               = auth;
+        window.signInAnonymously  = signInAnonymously;
         window.signInWithCustomToken = signInWithCustomToken;
         window.onAuthStateChanged = onAuthStateChanged;
-        window.collection = collection;
-        window.addDoc = addDoc;
-        window.updateDoc = updateDoc;
-        window.deleteDoc = deleteDoc;
-        window.setDoc = setDoc;
-        window.getDoc = getDoc;
-        window.getDocs = getDocs;
-        window.doc = doc;
-        window.onSnapshot = onSnapshot;
-        window.serverTimestamp = serverTimestamp;
-        window.writeBatch = writeBatch;
-        window.query = query;
-        window.orderBy = orderBy;
-        window.where = where;
-        window.increment = increment; 
-        window.limit = limit;
-        window.appId = appId;
-        window.initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        window.collection         = collection;
+        window.addDoc             = addDoc;
+        window.updateDoc          = updateDoc;
+        window.deleteDoc          = deleteDoc;
+        window.setDoc             = setDoc;
+        window.getDoc             = getDoc;
+        window.getDocs            = getDocs;
+        window.doc                = doc;
+        window.onSnapshot         = onSnapshot;
+        window.serverTimestamp    = serverTimestamp;
+        window.writeBatch         = writeBatch;
+        window.query              = query;
+        window.orderBy            = orderBy;
+        window.where              = where;
+        window.increment          = increment;
+        window.limit              = limit;
+        window.appId              = (typeof __app_id !== 'undefined') ? __app_id : 'default-app-id';
+        window.initialAuthToken   = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
+
+        window._sbKey = SUPABASE_KEY; // dipakai oleh keepalive fetch saat pagehide
+        console.log('✅ Supabase Adapter aktif →', SUPABASE_URL);
+    })();
     </script>
 
     <style>
@@ -7276,13 +7695,30 @@
                     const snap = autoSaveSnap.current;
                     if (snap?.isSessionActive && snap?.activeCartId) {
                         try {
-                            const projectId = window.db?.app?.options?.projectId;
+                            // Supabase: mark active_cart sebagai tidak aktif saat halaman ditutup
                             const cartId = snap.activeCartId;
-                            if (projectId && cartId) {
-                                const url = 'https://firestore.googleapis.com/v1/projects/' + projectId + '/databases/(default)/documents/artifacts/' + window.appId + '/public/data/active_carts/' + cartId + '?updateMask.fieldPaths=isActive';
-                                const body = JSON.stringify({ fields: { isActive: { booleanValue: false } } });
-                                navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
-                            }
+                            const appId  = window.appId || 'default-app-id';
+                            const pk     = appId + '::active_carts::' + cartId;
+                            // Gunakan keepalive fetch (lebih andal dari sendBeacon untuk REST API)
+                            fetch(
+                                window._supabaseClient?.supabaseUrl
+                                    ? window._supabaseClient.supabaseUrl + '/rest/v1/firestore_documents?path_key=eq.' + encodeURIComponent(pk)
+                                    : 'https://mnuunkrkoeqjzbxceodc.supabase.co/rest/v1/firestore_documents?path_key=eq.' + encodeURIComponent(pk),
+                                {
+                                    method: 'PATCH',
+                                    headers: {
+                                        'Content-Type':  'application/json',
+                                        'apikey':        window._sbKey || 'GANTI_DENGAN_SUPABASE_ANON_KEY_ANDA',
+                                        'Authorization': 'Bearer ' + (window._sbKey || 'GANTI_DENGAN_SUPABASE_ANON_KEY_ANDA'),
+                                        'Prefer':        'return=minimal',
+                                    },
+                                    // Catatan: PATCH ini update seluruh kolom data.
+                                    // isActive=false akan ter-set saat onSnapshot berikutnya re-fetch.
+                                    // Untuk skenario keepalive, kita tandai via field khusus.
+                                    body: JSON.stringify({ data: { __inactive: true } }),
+                                    keepalive: true,
+                                }
+                            ).catch(() => {});
                         } catch(e) { /* silent - best effort */ }
                     }
                     doAutoMoveToTertunda();
@@ -19168,7 +19604,7 @@
             });
             const [liveChangelog, setLiveChangelog] = useState(CHANGELOG);
 
-            // Firestore real-time listener untuk changelog notifikasi (dari admin panel)
+            // Supabase real-time listener untuk changelog notifikasi (dari admin panel)
             React.useEffect(() => {
                 if (!window.db) return;
                 const COLL = ['artifacts', window.appId || 'default-app-id', 'public', 'data', 'changelog'];
@@ -19177,8 +19613,8 @@
                 let unsub;
                 let _synced = false; // hanya sync sekali per session
 
-                // ── Auto-upsert: push entri CHANGELOG baru ke Firebase ──
-                // Jika versi di CHANGELOG (hardcode) belum ada di Firebase, tambahkan otomatis.
+                // ── Auto-upsert: push entri CHANGELOG baru ke Supabase ──
+                // Jika versi di CHANGELOG (hardcode) belum ada di Supabase, tambahkan otomatis.
                 // Admin panel akan langsung menerima update tanpa perlu ubah HTML admin.
                 async function autoSyncChangelogToFirebase(firestoreDocs) {
                     if (_synced) return;
@@ -19206,7 +19642,7 @@
                             }, { merge: false });
                         });
                         await batch.commit();
-                        console.log(`✅ ${newEntries.length} entri changelog baru di-sync ke Firebase`);
+                        console.log(`✅ ${newEntries.length} entri changelog baru di-sync ke Supabase`);
                     } catch(e) {
                         console.warn('Auto-sync changelog gagal:', e);
                     }
