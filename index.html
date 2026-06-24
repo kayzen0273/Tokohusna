@@ -340,6 +340,7 @@
 
         // Init Supabase client (untuk Realtime)
         const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth: { persistSession: false, autoRefreshToken: false },
             realtime: { params: { eventsPerSecond: 10 } }
         });
         window._supabaseClient = _sb;
@@ -415,42 +416,47 @@
             return { appId, coll, docId };
         }
 
-        // ── Supabase REST helper ─────────────────────────────────────────────────
-        async function _rest(method, path, body, qs) {
-            let url = SUPABASE_URL + '/rest/v1/firestore_documents';
-            if (path) url += path;
-            if (qs)   url += (url.includes('?') ? '&' : '?') + qs;
-            const hdrs = {
-                'Content-Type':  'application/json',
-                'apikey':        SUPABASE_KEY,
-                'Authorization': 'Bearer ' + SUPABASE_KEY,
-            };
-            if (['POST','PUT','PATCH'].includes(method)) hdrs['Prefer'] = 'return=representation';
-            const res = await fetch(url, {
-                method, headers: hdrs,
-                body: body ? JSON.stringify(body) : undefined,
-            });
-            if (!res.ok) {
-                const txt = await res.text();
-                console.error('[Supabase]', method, url, res.status, txt);
-                throw new Error('Supabase ' + method + ': ' + res.status);
-            }
-            return method === 'DELETE' ? null : res.json();
-        }
-
-        // ── Fetch helpers ────────────────────────────────────────────────────────
+        // ── Supabase SDK helpers (kompatibel sb_publishable & JWT key) ───────────
         async function _fetchCol(appId, coll) {
-            const rows = await _rest('GET', '', null,
-                'app_id=eq.' + encodeURIComponent(appId) +
-                '&collection_name=eq.' + encodeURIComponent(coll) +
-                '&select=doc_id,data');
-            return (rows || []).map(r => ({ id: r.doc_id, ...r.data }));
+            const { data, error } = await _sb
+                .from('firestore_documents')
+                .select('doc_id,data')
+                .eq('app_id', appId)
+                .eq('collection_name', coll);
+            if (error) { console.error('[Supabase] fetchCol', error); throw new Error('Supabase GET: ' + error.message); }
+            return (data || []).map(r => ({ id: r.doc_id, ...r.data }));
         }
         async function _fetchDoc(appId, coll, docId) {
-            const rows = await _rest('GET', '', null,
-                'path_key=eq.' + encodeURIComponent(_pk(appId, coll, docId)) +
-                '&select=doc_id,data');
-            return rows && rows.length ? { id: rows[0].doc_id, ...rows[0].data } : null;
+            const { data, error } = await _sb
+                .from('firestore_documents')
+                .select('doc_id,data')
+                .eq('path_key', _pk(appId, coll, docId))
+                .maybeSingle();
+            if (error) { console.error('[Supabase] fetchDoc', error); throw new Error('Supabase GET: ' + error.message); }
+            return data ? { id: data.doc_id, ...data.data } : null;
+        }
+        async function _upsertSdk(appId, coll, docId, processed) {
+            const { error } = await _sb
+                .from('firestore_documents')
+                .upsert(
+                    { path_key: _pk(appId, coll, docId), app_id: appId, collection_name: coll, doc_id: docId, data: processed, updated_at: new Date().toISOString() },
+                    { onConflict: 'path_key' }
+                );
+            if (error) { console.error('[Supabase] upsert', error); throw new Error('Supabase UPSERT: ' + error.message); }
+        }
+        async function _patchSdk(appId, coll, docId, updated) {
+            const { error } = await _sb
+                .from('firestore_documents')
+                .update({ data: updated, updated_at: new Date().toISOString() })
+                .eq('path_key', _pk(appId, coll, docId));
+            if (error) { console.error('[Supabase] patch', error); throw new Error('Supabase PATCH: ' + error.message); }
+        }
+        async function _deleteSdk(appId, coll, docId) {
+            const { error } = await _sb
+                .from('firestore_documents')
+                .delete()
+                .eq('path_key', _pk(appId, coll, docId));
+            if (error) { console.error('[Supabase] delete', error); throw new Error('Supabase DELETE: ' + error.message); }
         }
 
         // ── Snapshot wrappers (meniru Firebase DocumentSnapshot / QuerySnapshot) ─
@@ -576,11 +582,7 @@
             const docId = _uid();
             const { appId, coll } = colRef;
             const processed = _resolve(data, {});
-            await _rest('POST',
-                '?on_conflict=path_key',
-                { path_key: _pk(appId, coll, docId), app_id: appId, collection_name: coll, doc_id: docId, data: processed },
-                null
-            );
+            await _upsertSdk(appId, coll, docId, processed);
             return { id: docId };
         }
 
@@ -594,11 +596,7 @@
             } else {
                 processed = _resolve(data, {});
             }
-            await _rest('POST',
-                '?on_conflict=path_key',
-                { path_key: _pk(appId, coll, docId), app_id: appId, collection_name: coll, doc_id: docId, data: processed },
-                null
-            );
+            await _upsertSdk(appId, coll, docId, processed);
         }
 
         // ── updateDoc(docRef, data) ───────────────────────────────────────────────
@@ -606,18 +604,13 @@
             const { appId, coll, docId } = docRef;
             const existing = await _fetchDoc(appId, coll, docId);
             const updated  = _resolve(data, existing || {});
-            await _rest('PATCH',
-                '?path_key=eq.' + encodeURIComponent(_pk(appId, coll, docId)),
-                { data: updated }
-            );
+            await _patchSdk(appId, coll, docId, updated);
         }
 
         // ── deleteDoc(docRef) ─────────────────────────────────────────────────────
         async function deleteDoc(docRef) {
             const { appId, coll, docId } = docRef;
-            await _rest('DELETE',
-                '?path_key=eq.' + encodeURIComponent(_pk(appId, coll, docId))
-            );
+            await _deleteSdk(appId, coll, docId);
         }
 
         // ── getDoc(docRef) ────────────────────────────────────────────────────────
@@ -7777,8 +7770,7 @@
                                     method: 'PATCH',
                                     headers: {
                                         'Content-Type':  'application/json',
-                                        'apikey':        window._sbKey || 'GANTI_DENGAN_SUPABASE_ANON_KEY_ANDA',
-                                        'Authorization': 'Bearer ' + (window._sbKey || 'GANTI_DENGAN_SUPABASE_ANON_KEY_ANDA'),
+                                        'apikey':        window._sbKey || '',
                                         'Prefer':        'return=minimal',
                                     },
                                     // Catatan: PATCH ini update seluruh kolom data.
@@ -20218,7 +20210,18 @@
             if (!authSession) {
                 return <AuthScreen onAuthSuccess={(sessionData) => { setAuthSession(sessionData); }} />;
             }
-            
+
+            // Tunggu user (Firebase anonymous auth) siap — hindari blank putih saat ganti akun
+            if (!user) {
+                return (
+                    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:"#f8fafc", fontFamily:"sans-serif" }}>
+                        <div style={{ width:"40px", height:"40px", border:"4px solid #e2e8f0", borderTopColor:"#0ea5e9", borderRadius:"50%", animation:"spin 0.8s linear infinite", marginBottom:"16px" }} />
+                        <p style={{ color:"#64748b", fontSize:"14px" }}>Menghubungkan ke server...</p>
+                        <style>{"@keyframes spin { to { transform: rotate(360deg) } }"}</style>
+                    </div>
+                );
+            }
+
             const isOwner = isOwnerEmail(authSession?.email);
 
             // Daftar toko yang boleh diakses user (owner selalu bisa akses semua)
@@ -20814,8 +20817,37 @@
                 </div>
             );
         };
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+
+        // ── Error Boundary: tampil pesan bukan blank putih ────────────────────────
+        class ErrorBoundary extends React.Component {
+            constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+            static getDerivedStateFromError(error) { return { hasError: true, error }; }
+            componentDidCatch(error, info) { console.error("[App Error]", error, info); }
+            render() {
+                if (this.state.hasError) {
+                    return React.createElement("div", {
+                        style: { display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:"#f8fafc", padding:"24px", textAlign:"center", fontFamily:"sans-serif" }
+                    },
+                        React.createElement("div", { style: { fontSize:"48px", marginBottom:"16px" } }, "⚠️"),
+                        React.createElement("h2", { style: { color:"#1e293b", marginBottom:"8px", fontSize:"20px" } }, "Terjadi Kesalahan"),
+                        React.createElement("p", { style: { color:"#64748b", marginBottom:"8px", maxWidth:"420px", fontSize:"14px" } }, this.state.error?.message || "Unknown error"),
+                        React.createElement("p", { style: { color:"#94a3b8", marginBottom:"24px", fontSize:"12px" } }, "Coba muat ulang, atau logout lalu login kembali"),
+                        React.createElement("button", {
+                            onClick: () => window.location.reload(),
+                            style: { background:"#0ea5e9", color:"white", border:"none", borderRadius:"10px", padding:"12px 28px", fontSize:"14px", fontWeight:"700", cursor:"pointer", marginRight:"8px" }
+                        }, "🔄 Muat Ulang"),
+                        React.createElement("button", {
+                            onClick: () => { localStorage.removeItem("husna_auth_session"); window.location.reload(); },
+                            style: { background:"#f1f5f9", color:"#475569", border:"none", borderRadius:"10px", padding:"12px 28px", fontSize:"14px", fontWeight:"700", cursor:"pointer", marginTop:"8px" }
+                        }, "🚪 Logout & Muat Ulang")
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById("root"));
+        root.render(React.createElement(ErrorBoundary, null, React.createElement(App)));
         if (window.__bootDone) window.__bootDone();
     </script>
 <audio id="chaching-sound" src="cha-ching.mp3" preload="auto"></audio>
