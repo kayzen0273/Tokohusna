@@ -1443,7 +1443,7 @@
                 // if (settings.storeHeader3 && (!headers.length)) { encoder.text(settings.storeHeader3).newline(); }
                 headers.forEach(h => { if(h && h.trim()) encoder.text(h).newline(); });
                 
-                const receiptDate = receipt.date.seconds ? receipt.date.toDate() : new Date(receipt.date);
+                const receiptDate = receipt.date ? (receipt.date.seconds ? receipt.date.toDate() : new Date(receipt.date)) : new Date(0);
                 const hariIndo = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][receiptDate.getDay()];
                 encoder.line().alignLeft()
                     .text(`Tgl: ${hariIndo}, ${receiptDate.toLocaleDateString('id-ID')} ${receiptDate.toLocaleTimeString('id-ID')}`)
@@ -10226,7 +10226,7 @@
             const dailyTransactions = useMemo(() => {
                 const { from, to } = getDateRanges();
                 return transactions.filter(tx => {
-                    const txDate = tx.date.seconds ? tx.date.toDate() : new Date(tx.date);
+                    const txDate = tx.date ? (tx.date.seconds ? tx.date.toDate() : new Date(tx.date)) : new Date(0);
                     if (filterMode === 'today') return isSameDay(txDate, from);
                     if (filterMode === 'specific') {
                         const fromDay = new Date(from); fromDay.setHours(0,0,0,0);
@@ -10264,8 +10264,8 @@
                 if (filterPayment.length > 0) { data = data.filter(tx => filterPayment.includes(tx.paymentMethod || 'tunai')); }
                 if (filterTipe !== 'all') { data = data.filter(tx => (tx.tipeTransaksi || 'Harga normal') === filterTipe); }
                 data.sort((a, b) => {
-                    const dateA = a.date.seconds ? a.date.toDate() : new Date(a.date);
-                    const dateB = b.date.seconds ? b.date.toDate() : new Date(b.date);
+                    const dateA = a.date ? (a.date.seconds ? a.date.toDate() : new Date(a.date)) : new Date(0);
+                    const dateB = b.date ? (b.date.seconds ? b.date.toDate() : new Date(b.date)) : new Date(0);
                     switch (sortOrder) { case 'oldest': return dateA - dateB; case 'highest': return b.total - a.total; case 'lowest': return a.total - b.total; case 'newest': default: return dateB - dateA; }
                 });
                 return data;
@@ -10280,11 +10280,11 @@
             const stats = useMemo(() => {
                 let grossSales = 0, grossCount = 0, returnsValue = 0, returnTxCount = 0, totalUangR = 0, totalPembulatan = 0;
                 processedTransactions.forEach(tx => {
-                    grossSales += tx.items.reduce((sum, item) => sum + (item.price * item.cartQty), 0); grossCount++;
+                    grossSales += (tx.items || []).reduce((sum, item) => sum + ((item.price || 0) * (item.cartQty || 0)), 0); grossCount++;
                     let txReturnVal = 0, hasReturn = false;
-                    tx.items.forEach(item => { if (item.returnedQty && item.returnedQty > 0) { txReturnVal += (item.returnedQty * item.price); hasReturn = true; } else if (tx.status === 'returned') { txReturnVal += (item.cartQty * item.price); hasReturn = true; } });
+                    (tx.items || []).forEach(item => { if (item.returnedQty && item.returnedQty > 0) { txReturnVal += (item.returnedQty * (item.price||0)); hasReturn = true; } else if (tx.status === 'returned') { txReturnVal += ((item.cartQty||0) * (item.price||0)); hasReturn = true; } });
                     returnsValue += txReturnVal; if (hasReturn) returnTxCount++;
-                    tx.items.forEach(item => { if (item.isRacikanGroup && item.racikanInfo?.uangR) totalUangR += (parseInt(item.racikanInfo.uangR) || 0); });
+                    (tx.items || []).forEach(item => { if (item.isRacikanGroup && item.racikanInfo?.uangR) totalUangR += (parseInt(item.racikanInfo.uangR) || 0); });
                     if (tx.pembulatan) totalPembulatan += (tx.pembulatan || 0);
                 });
                 return { netSales: grossSales - returnsValue, grossSales, grossCount, returnsValue, returnTxCount, avgSale: grossCount > 0 ? grossSales / grossCount : 0, totalUangR, totalPembulatan };
@@ -10295,8 +10295,8 @@
             // Buka sub-page retur (flow baru: step1 → step2)
             const openReturPage = (tx) => {
                 if (!canReturOldTransaction(tx)) { showToast('Hanya Owner atau akun yang diizinkan yang bisa retur transaksi kemarin & sebelumnya', 'error'); return; }
-                const rItems = tx.items
-                    .map((item, origIdx) => ({ ...item, origIdx, maxRetur: item.cartQty - (item.returnedQty || 0) }))
+                const rItems = (tx.items || [])
+                    .map((item, origIdx) => ({ ...item, origIdx, maxRetur: (item.cartQty||0) - (item.returnedQty || 0) }))
                     .filter(item => item.maxRetur > 0)
                     .map(item => ({ ...item, checked: false, returQty: item.maxRetur }));
                 if (rItems.length === 0) { showToast('Semua item sudah diretur', 'error'); return; }
@@ -10328,9 +10328,9 @@
                     const batch = window.writeBatch(window.db);
                     const storeIdToReturn = selectedTx.storeId || 'default';
                     const stockField = `stocks.${storeIdToReturn}`;
-                    const updatedItems = [...selectedTx.items];
+                    const updatedItems = [...(selectedTx.items || [])];
                     for (const ri of selItems) {
-                        const origIdx = ri.origIdx !== undefined ? ri.origIdx : selectedTx.items.findIndex(i => i.id === ri.id);
+                        const origIdx = ri.origIdx !== undefined ? ri.origIdx : (selectedTx.items || []).findIndex(i => i.id === ri.id);
                         if (origIdx === -1) continue;
                         if (ri.isRacikanGroup) {
                             (ri.racikanItems || []).forEach(b => {
@@ -10376,7 +10376,7 @@
             // Cek apakah transaksi berasal dari hari sebelum hari ini
             const isTxOlderThanToday = (tx) => {
                 if (!tx?.date) return false;
-                const txDate = tx.date?.toDate ? tx.date.toDate() : new Date(tx.date);
+                const txDate = tx.date ? (tx.date?.toDate ? tx.date.toDate() : new Date(tx.date)) : new Date(0);
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 return txDate < today;
@@ -10414,7 +10414,7 @@
                     }
                     
                     const txRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions', tx.id);
-                    const updatedItems = [...tx.items];
+                    const updatedItems = [...(tx.items || [])];
                     updatedItems[index].returnedQty = (updatedItems[index].returnedQty || 0) + qtyToRetur;
                     let totalItemsCount = 0, totalReturnedCount = 0;
                     updatedItems.forEach(i => { totalItemsCount += i.cartQty; totalReturnedCount += (i.returnedQty || 0); });
@@ -10485,7 +10485,7 @@
                     // Agregasi item terjual dari transaksi yang sudah difilter
                     const itemMap = {};
                     processedTransactions.forEach(tx => {
-                        tx.items.forEach(item => {
+                        (tx.items || []).forEach(item => {
                             const netQty = (item.cartQty || 0) - (item.returnedQty || 0);
                             if (netQty <= 0) return;
                             const key = item.id || item.name;
@@ -10501,7 +10501,7 @@
                     const buyPriceMap = {};
                     purchasesData.forEach(p => {
                         if (p.items) {
-                            p.items.forEach(pi => {
+                            (p.items || []).forEach(pi => {
                                 const key = pi.id || pi.name;
                                 if (pi.buyPrice > 0 && !buyPriceMap[key]) {
                                     buyPriceMap[key] = pi.buyPrice;
@@ -10942,7 +10942,7 @@
                                 <div className="flex items-start gap-2">
                                     <span className="text-xs font-bold text-slate-400 mt-0.5">{(histPage - 1) * HIST_PAGE_SIZE + idx + 1}</span>
                                     <div>
-                                        <p className="text-xs font-bold text-teal-600">{(() => { const d = new Date(tx.date.seconds ? tx.date.toDate() : tx.date); return d.toLocaleDateString('en-GB', {year:'numeric', month:'short', day:'numeric'}) + ', ' + d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) + ' WIB'; })()}</p>
+                                        <p className="text-xs font-bold text-teal-600">{(() => { const d = tx.date ? new Date(tx.date.seconds ? tx.date.toDate() : tx.date) : new Date(0); return d.toLocaleDateString('en-GB', {year:'numeric', month:'short', day:'numeric'}) + ', ' + d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) + ' WIB'; })()}</p>
                                         <p className={`text-sm font-black ${tx.status === 'returned' ? 'text-red-500 line-through' : 'text-teal-600'}`}>#{tx.id?.slice(-10).toUpperCase()}</p>
                                     </div>
                                 </div>
@@ -10956,7 +10956,7 @@
                             {/* Barang */}
                             <div className="mt-2 mb-3">
                                 <p className="text-xs font-black text-slate-800 mb-0.5">Barang</p>
-                                <p className="text-xs text-slate-600 leading-snug">{tx.items.map(i => i.name).join(', ')}</p>
+                                <p className="text-xs text-slate-600 leading-snug">{(tx.items || []).map(i => i.name || '').join(', ')}</p>
                             </div>
                             {/* Grid 2 kolom: Kasir | Sales */}
                             <div className="grid grid-cols-2 gap-x-4 mb-2">
@@ -11214,7 +11214,7 @@
                                     <span className="w-20 text-right">Harga</span>
                                 </div>
                                 {(() => {
-                                    return selectedTx.items.map((item, idx) => {
+                                    return (selectedTx.items || []).map((item, idx) => {
                                         const returnedQty = item.returnedQty || 0;
                                         const isFullyReturned = returnedQty >= item.cartQty;
                                         const ri = item.racikanInfo;
@@ -11247,7 +11247,7 @@
                                 {(() => {
                                     const subtotalTx = selectedTx.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * item.cartQty), 0);
                                     const diskonTxRp = subtotalTx - selectedTx.total;
-                                    const discountedItems = selectedTx.items.filter(i => i.discount && i.discount.value > 0);
+                                    const discountedItems = (selectedTx.items || []).filter(i => i.discount && i.discount.value > 0);
                                     const uniqTypes = [...new Set(discountedItems.map(i => i.discount.type))];
                                     const uniqValues = [...new Set(discountedItems.map(i => i.discount.value))];
                                     let diskonLabel = 'Diskon';
@@ -20309,7 +20309,7 @@
                             </div> 
                             <div className="border-b-2 border-dashed border-gray-300 my-2"></div>
                             {(() => {
-                                const rd = receiptToPrint.date.seconds ? receiptToPrint.date.toDate() : new Date(receiptToPrint.date);
+                                const rd = receiptToPrint.date ? (receiptToPrint.date.seconds ? receiptToPrint.date.toDate() : new Date(receiptToPrint.date)) : new Date(0);
                                 const hariReceipt = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][rd.getDay()];
                                 return (
                                     <>
