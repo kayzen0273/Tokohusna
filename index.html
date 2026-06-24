@@ -10956,7 +10956,7 @@
                             {/* Barang */}
                             <div className="mt-2 mb-3">
                                 <p className="text-xs font-black text-slate-800 mb-0.5">Barang</p>
-                                <p className="text-xs text-slate-600 leading-snug">{(tx.items || []).map(i => i.name || '').join(', ')}</p>
+                                <p className="text-xs text-slate-600 leading-snug">{(tx.items || []).map(i => String(i.name || '')).join(', ')}</p>
                             </div>
                             {/* Grid 2 kolom: Kasir | Sales */}
                             <div className="grid grid-cols-2 gap-x-4 mb-2">
@@ -11245,19 +11245,19 @@
                                     });
                                 })()}
                                 {(() => {
-                                    const subtotalTx = selectedTx.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * item.cartQty), 0);
-                                    const diskonTxRp = subtotalTx - selectedTx.total;
+                                    const subtotalTx = (selectedTx.items || []).reduce((acc, item) => acc + (((item.originalPrice || item.price) || 0) * (item.cartQty || 0)), 0);
+                                    const diskonTxRp = subtotalTx - (selectedTx.total || 0);
                                     const discountedItems = (selectedTx.items || []).filter(i => i.discount && i.discount.value > 0);
-                                    const uniqTypes = [...new Set(discountedItems.map(i => i.discount.type))];
-                                    const uniqValues = [...new Set(discountedItems.map(i => i.discount.value))];
+                                    const uniqTypes = [...new Set(discountedItems.map(i => i.discount?.type).filter(Boolean))];
+                                    const uniqValues = [...new Set(discountedItems.map(i => i.discount?.value).filter(v => v !== undefined))];
                                     let diskonLabel = 'Diskon';
                                     if (discountedItems.length > 0 && uniqTypes.length === 1) {
                                         if (uniqTypes[0] === '%') { diskonLabel = uniqValues.length === 1 ? ('Diskon ' + uniqValues[0] + '%') : 'Diskon (%)'; }
                                         else { diskonLabel = uniqValues.length === 1 ? ('Diskon ' + formatRupiah(uniqValues[0])) : 'Diskon (Rp)'; }
                                     }
                                     // Hitung nilai retur dan total setelah retur
-                                    const totalReturnedValue = selectedTx.items.reduce((acc, item) => acc + (item.price * (item.returnedQty || 0)), 0);
-                                    const totalSetelahRetur = selectedTx.total - totalReturnedValue;
+                                    const totalReturnedValue = (selectedTx.items || []).reduce((acc, item) => acc + ((item.price || 0) * (item.returnedQty || 0)), 0);
+                                    const totalSetelahRetur = (selectedTx.total || 0) - totalReturnedValue;
                                     const hasRetur = totalReturnedValue > 0;
                                     return (
                                         <div className="mt-1 pt-1">
@@ -20319,12 +20319,12 @@
                                     </>
                                 );
                             })()}
-                            <div className="border-b-2 border-dashed border-gray-300 my-2"></div> <div className="space-y-2 mb-4"> {(() => { let rcIdx = 0; return receiptToPrint.items.map((item, idx) => { let displayName = item.name; if (item.isRacikanGroup) { rcIdx++; displayName = `Racikan ${rcIdx}`; } return ( <div key={idx} className="text-sm"> <div className="font-bold">{displayName}</div> <div className="flex justify-between"> <span>{item.cartQty} x {formatRupiah(item.price)}</span> <span>{formatRupiah(item.cartQty * item.price)}</span> </div> </div> ); }); })()} </div> <div className="border-b-2 border-dashed border-gray-300 my-2"></div> {(() => {
-  const subtotalR = receiptToPrint.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * item.cartQty), 0);
-  const diskonR = subtotalR - receiptToPrint.total;
-  const discountedR = receiptToPrint.items.filter(i => i.discount && i.discount.value > 0);
-  const uniqTypesR = [...new Set(discountedR.map(i => i.discount.type))];
-  const uniqValuesR = [...new Set(discountedR.map(i => i.discount.value))];
+                            <div className="border-b-2 border-dashed border-gray-300 my-2"></div> <div className="space-y-2 mb-4"> {(() => { let rcIdx = 0; return (receiptToPrint.items || []).map((item, idx) => { let displayName = item.name; if (item.isRacikanGroup) { rcIdx++; displayName = `Racikan ${rcIdx}`; } return ( <div key={idx} className="text-sm"> <div className="font-bold">{displayName}</div> <div className="flex justify-between"> <span>{item.cartQty} x {formatRupiah(item.price)}</span> <span>{formatRupiah(item.cartQty * item.price)}</span> </div> </div> ); }); })()} </div> <div className="border-b-2 border-dashed border-gray-300 my-2"></div> {(() => {
+  const subtotalR = (receiptToPrint.items || []).reduce((acc, item) => acc + (((item.originalPrice || item.price) || 0) * (item.cartQty || 0)), 0);
+  const diskonR = Math.max(0, subtotalR - (receiptToPrint.total || 0));
+  const discountedR = (receiptToPrint.items || []).filter(i => i.discount && i.discount.value > 0);
+  const uniqTypesR = [...new Set(discountedR.map(i => i.discount?.type).filter(Boolean))];
+  const uniqValuesR = [...new Set(discountedR.map(i => i.discount?.value).filter(v => v !== undefined))];
   let diskonLabelR = 'Diskon';
   if (discountedR.length > 0 && uniqTypesR.length === 1) {
     if (uniqTypesR[0] === '%') {
