@@ -423,7 +423,7 @@
                 .select('doc_id,data')
                 .eq('app_id', appId)
                 .eq('collection_name', coll);
-            if (error) { console.error('[Supabase] fetchCol', error); throw new Error('Supabase GET: ' + error.message); }
+            if (error) { console.error('[Supabase] fetchCol', error); throw new Error(error.details || error.message || JSON.stringify(error)); }
             return (data || []).map(r => ({ id: r.doc_id, ...r.data }));
         }
         async function _fetchDoc(appId, coll, docId) {
@@ -432,7 +432,7 @@
                 .select('doc_id,data')
                 .eq('path_key', _pk(appId, coll, docId))
                 .maybeSingle();
-            if (error) { console.error('[Supabase] fetchDoc', error); throw new Error('Supabase GET: ' + error.message); }
+            if (error) { console.error('[Supabase] fetchDoc', error); throw new Error(error.details || error.message || JSON.stringify(error)); }
             return data ? { id: data.doc_id, ...data.data } : null;
         }
         async function _upsertSdk(appId, coll, docId, processed) {
@@ -442,21 +442,21 @@
                     { path_key: _pk(appId, coll, docId), app_id: appId, collection_name: coll, doc_id: docId, data: processed, updated_at: new Date().toISOString() },
                     { onConflict: 'path_key' }
                 );
-            if (error) { console.error('[Supabase] upsert', error); throw new Error('Supabase UPSERT: ' + error.message); }
+            if (error) { console.error('[Supabase] upsert', error); throw new Error(error.details || error.message || JSON.stringify(error)); }
         }
         async function _patchSdk(appId, coll, docId, updated) {
             const { error } = await _sb
                 .from('firestore_documents')
                 .update({ data: updated, updated_at: new Date().toISOString() })
                 .eq('path_key', _pk(appId, coll, docId));
-            if (error) { console.error('[Supabase] patch', error); throw new Error('Supabase PATCH: ' + error.message); }
+            if (error) { console.error('[Supabase] patch', error); throw new Error(error.details || error.message || JSON.stringify(error)); }
         }
         async function _deleteSdk(appId, coll, docId) {
             const { error } = await _sb
                 .from('firestore_documents')
                 .delete()
                 .eq('path_key', _pk(appId, coll, docId));
-            if (error) { console.error('[Supabase] delete', error); throw new Error('Supabase DELETE: ' + error.message); }
+            if (error) { console.error('[Supabase] delete', error); throw new Error(error.details || error.message || JSON.stringify(error)); }
         }
 
         // ── Snapshot wrappers (meniru Firebase DocumentSnapshot / QuerySnapshot) ─
@@ -20191,7 +20191,7 @@
                             purchasesSnap.docs.forEach(pDoc => {
                                 const pData = pDoc.data();
                                 if (!pData.items) return;
-                                const itemIndex = pData.items.findIndex(it => it.id === savedItemId || it.name.toLowerCase() === formData.name.toLowerCase());
+                                const itemIndex = pData.items.findIndex(it => it.id === savedItemId || (it.name || '').toLowerCase() === formData.name.toLowerCase());
                                 if (itemIndex !== -1 && pData.items[itemIndex].buyPrice !== newCostPrice) {
                                     const updatedItems = [...pData.items];
                                     updatedItems[itemIndex] = { ...updatedItems[itemIndex], buyPrice: newCostPrice };
@@ -20206,7 +20206,7 @@
                     }
 
                     setEditingItem(null); setFormData({ name: '', qty: '', unit: 'Pcs', exp: '', rack: '', price: '', costPrice: '', minStock: '', defaultDiscount: '', defaultDiscountType: '%', packagePrices: [] }); setActiveTab('list');
-                } catch (error) { console.error("Error saving:", error); showToast("Gagal menyimpan ke database", "error"); } finally { setSubmitting(false); }
+                } catch (error) { console.error("Error saving:", error); showToast("Gagal menyimpan: " + (error?.message || String(error)), "error"); } finally { setSubmitting(false); }
             };
 
             const handleSaveSettings = async (newSettings) => { if(!user) return; setSubmitting(true); try { const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'settings', 'global'); await window.setDoc(docRef, newSettings); showToast("Pengaturan disimpan"); } catch(error) { console.error(error); showToast("Gagal simpan pengaturan", "error"); } finally { setSubmitting(false); } };
