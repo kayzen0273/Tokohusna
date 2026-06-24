@@ -4524,7 +4524,7 @@
                 if (qty <= 0 || price <= 0) { showToast("Qty dan harga harus lebih dari 0!", "error"); return; }
 
                 // Cek nama barang sudah ada di daftar barang
-                const existingItem = items.find(i => i.name.toLowerCase() === newItemData.name.trim().toLowerCase());
+                const existingItem = items.find(i => (i.name || '').toLowerCase() === newItemData.name.trim().toLowerCase());
                 if (existingItem) {
                     // Barang sudah ada → pakai seperti biasa
                     setSelectedItem(existingItem);
@@ -4593,7 +4593,7 @@
             
             // Filter items untuk search
             const filteredItems = items.filter(item => 
-                item.name.toLowerCase().includes(itemSearch.toLowerCase())
+                (item.name || '').toLowerCase().includes(itemSearch.toLowerCase())
             ).slice(0, 10);
 
             // Filter purchases by store
@@ -4651,7 +4651,7 @@
                         if (item.discountBeli2 > 0) effPrice = item.discountBeliType2 === 'Rp' ? Math.max(0, effPrice - item.discountBeli2) : effPrice * (1 - item.discountBeli2 / 100);
                         if (item.discountBeli3 > 0) effPrice = item.discountBeliType3 === 'Rp' ? Math.max(0, effPrice - item.discountBeli3) : effPrice * (1 - item.discountBeli3 / 100);
                         if (effPrice <= 0) return;
-                        const normName = item.name.trim();
+                        const normName = (item.name || '').trim();
                         if (!itemMap[normName]) itemMap[normName] = {};
                         const existing = itemMap[normName][p.supplier];
                         const thisDate = p.date ? new Date(p.date) : new Date(0);
@@ -4939,7 +4939,7 @@
                             const meta = item._newItemMeta || {};
                             const collRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory');
                             // Cek sekali lagi apakah nama sudah ada (race condition)
-                            const existingByName = items.find(i => i.name.toLowerCase() === item.name.toLowerCase());
+                            const existingByName = items.find(i => (i.name || '').toLowerCase() === (item.name || '').toLowerCase());
                             if (existingByName) {
                                 // Sudah ada → pakai id yang sudah ada
                                 return { ...item, id: existingByName.id, _pendingNew: false, _newItemMeta: undefined };
@@ -5325,7 +5325,7 @@
                 setDetailModalOpen(false);
                 setInvoiceModalOpen(true);
             };
-            const filteredSuppliers = suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()));
+            const filteredSuppliers = suppliers.filter(s => (s.name || '').toLowerCase().includes(supplierSearch.toLowerCase()));
             const uniqueSupplierNames = [...new Set(storePurchases.map(p => p.supplier).filter(Boolean))].sort();
             const filteredPurchases = storePurchases.filter(p => {
                 const q = purchaseSearch.toLowerCase();
@@ -7389,7 +7389,7 @@
                     await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'dokter_list', editId), { name: name.trim(), alamat: alamat.trim(), hp: hp.trim() });
                     showToast('Data dokter diperbarui');
                 } else {
-                    const exists = dokterList.find(d => d.name.toLowerCase() === name.trim().toLowerCase());
+                    const exists = dokterList.find(d => (d.name || '').toLowerCase() === name.trim().toLowerCase());
                     if (!exists) {
                         await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'dokter_list'), { name: name.trim(), alamat: alamat.trim(), hp: hp.trim(), createdAt: window.serverTimestamp() });
                     }
@@ -7411,7 +7411,7 @@
                     await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'pasien_list', editId), { name: name.trim(), age: age || '', alamat: alamat.trim(), hp: hp.trim() });
                     showToast('Data pasien diperbarui');
                 } else {
-                    const exists = pasienList.find(p => p.name.toLowerCase() === name.trim().toLowerCase());
+                    const exists = pasienList.find(p => (p.name || '').toLowerCase() === name.trim().toLowerCase());
                     if (!exists) {
                         await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pasien_list'), { name: name.trim(), age: age || '', alamat: alamat.trim(), hp: hp.trim(), createdAt: window.serverTimestamp() });
                     }
@@ -8782,7 +8782,7 @@
                                                     if (!name) return;
                                                     setSavingPembeli(true);
                                                     try {
-                                                        const exists = pasienList.find(p => p.name.toLowerCase() === name.toLowerCase());
+                                                        const exists = pasienList.find(p => (p.name || '').toLowerCase() === name.toLowerCase());
                                                         if (!exists) {
                                                             await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pasien_list'), { name, age: '', alamat: '', hp: '', createdAt: window.serverTimestamp() });
                                                         }
@@ -8818,7 +8818,7 @@
                                                     <p className="text-center text-xs text-slate-400 py-4">Tidak ada pembeli ditemukan.<br/>Klik <b>+ Pembeli</b> untuk tambah baru.</p>
                                                 )}
                                             </div>
-                                            {pembeliInput.trim() && !pasienList.find(p => p.name.toLowerCase() === pembeliInput.trim().toLowerCase()) && (
+                                            {pembeliInput.trim() && !pasienList.find(p => (p.name || '').toLowerCase() === pembeliInput.trim().toLowerCase()) && (
                                                 <button onClick={() => { setSelectedPembeli(pembeliInput.trim()); setShowPembeliModal(false); }}
                                                     className="w-full mt-3 py-2.5 rounded-xl border-2 border-dashed border-teal-300 text-teal-600 text-xs font-bold hover:bg-teal-50 transition-all active:scale-95">
                                                     Pilih "{pembeliInput.trim()}" (tanpa simpan)
@@ -8964,7 +8964,7 @@
                                                 <p className="text-[10px] font-bold text-slate-500 uppercase mb-1.5">Pilih Barang</p>
                                                 <input value={paketItemSearch} onChange={e => setPaketItemSearch(e.target.value)} placeholder="Cari barang..." className="w-full text-xs border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:border-teal-400 mb-2" />
                                                 <div className="max-h-36 overflow-y-auto divide-y divide-slate-100 border border-slate-100 rounded-lg mb-3">
-                                                    {items.filter(it => !paketItemSearch || it.name.toLowerCase().includes(paketItemSearch.toLowerCase())).slice(0, 20).map(it => {
+                                                    {items.filter(it => !paketItemSearch || (it.name || '').toLowerCase().includes(paketItemSearch.toLowerCase())).slice(0, 20).map(it => {
                                                         const inPaket = paketForm.items.find(pi => pi.itemId === it.id);
                                                         return (
                                                             <div key={it.id} className="flex items-center justify-between px-2 py-1.5 hover:bg-slate-50">
@@ -9508,7 +9508,7 @@
                                             <span className="text-xs text-slate-400">{dokterList.length} data</span>
                                         </div>
                                         {(() => {
-                                            const filtered = dokterSearch ? dokterList.filter(d => d.name.toLowerCase().includes(dokterSearch.toLowerCase())) : dokterList;
+                                            const filtered = dokterSearch ? dokterList.filter(d => (d.name || '').toLowerCase().includes(dokterSearch.toLowerCase())) : dokterList;
                                             if (filtered.length === 0) return (
                                                 <div className="border border-slate-200 rounded-2xl p-10 flex flex-col items-center gap-3 mt-2">
                                                     <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
@@ -9650,7 +9650,7 @@
                                             <span className="text-xs text-slate-400">{pasienList.length} data</span>
                                         </div>
                                         {(() => {
-                                            const filtered = pasienSearch ? pasienList.filter(p => p.name.toLowerCase().includes(pasienSearch.toLowerCase())) : pasienList;
+                                            const filtered = pasienSearch ? pasienList.filter(p => (p.name || '').toLowerCase().includes(pasienSearch.toLowerCase())) : pasienList;
                                             if (filtered.length === 0) return (
                                                 <div className="border border-slate-200 rounded-2xl p-10 flex flex-col items-center gap-3 mt-2">
                                                     <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
@@ -10249,7 +10249,7 @@
                     const lowerQ = historySearch.toLowerCase();
                     data = data.filter(tx => {
                         if (tx.items && tx.items.some(i => {
-                            if (i.name.toLowerCase().includes(lowerQ)) return true;
+                            if ((i.name || '').toLowerCase().includes(lowerQ)) return true;
                             if (i.racikanInfo) {
                                 if (i.racikanInfo.dokter && i.racikanInfo.dokter.toLowerCase().includes(lowerQ)) return true;
                                 if (i.racikanInfo.pasien && i.racikanInfo.pasien.toLowerCase().includes(lowerQ)) return true;
@@ -13310,7 +13310,7 @@
             const debouncedSetSearchQuery = useMemo(() => { let timer; return (val) => { clearTimeout(timer); timer = setTimeout(() => setSearchQuery(val), 300); }; }, []);
             const toggleRack = (rackName) => { setSelectedRacks(prev => { if (prev.includes(rackName)) return prev.filter(r => r !== rackName); return [...prev, rackName]; }); };
             const getRackLabel = () => { if (selectedRacks.length === 0) return "Semua Rak"; if (selectedRacks.length === 1) return selectedRacks[0]; return `${selectedRacks.length} Rak Terpilih`; };
-            const filteredRacks = uniqueRacksData.filter(r => r.name.toLowerCase().includes(rackSearch.toLowerCase()));
+            const filteredRacks = uniqueRacksData.filter(r => (r.name || '').toLowerCase().includes(rackSearch.toLowerCase()));
             const displayedItems = filteredItems.slice(0, displayedLimit);
 
             if (selectedDetailItem) {
@@ -17605,7 +17605,7 @@
             // Filter pencarian
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase();
-                filteredItems = filteredItems.filter(i => i.name.toLowerCase().includes(q));
+                filteredItems = filteredItems.filter(i => (i.name || '').toLowerCase().includes(q));
             }
 
             // Filter prioritas
@@ -19224,7 +19224,7 @@
 
                     const filteredProducts = React.useMemo(() => {
                         if (!searchQuery) return plData.products;
-                        return plData.products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
+                        return plData.products.filter(p => (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()));
                     }, [plData.products, searchQuery]);
 
                     const pmMeta = { tunai: { label: 'Tunai', color: '#0ea5e9', icon: 'money-bill' }, qris: { label: 'QRIS', color: '#8b5cf6', icon: 'qrcode' }, transfer: { label: 'Transfer', color: '#f59e0b', icon: 'building-columns' }, kartu: { label: 'Kartu', color: '#ec4899', icon: 'credit-card' } };
@@ -19519,7 +19519,7 @@
                             });
                         });
                         let arr = Object.values(map);
-                        if (searchQuery) arr = arr.filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()));
+                        if (searchQuery) arr = arr.filter(r => (r.name || '').toLowerCase().includes(searchQuery.toLowerCase()));
                         arr.sort((a, b) => sortBy === 'qty' ? b.totalQty - a.totalQty : b.totalRevenue - a.totalRevenue);
                         return arr;
                     }, [filteredTx, searchQuery, sortBy]);
@@ -20136,7 +20136,7 @@
                         }
                         showToast(`Stok untuk ${currentProfile.name} diperbarui`);
                     } else {
-                        const existingItem = rawInventory.find(i => i.name.toLowerCase() === formData.name.toLowerCase());
+                        const existingItem = rawInventory.find(i => (i.name || '').toLowerCase() === formData.name.toLowerCase());
                         if (existingItem) {
                              const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', existingItem.id);
                              await window.updateDoc(docRef, { ...baseData, ...stockUpdate });
