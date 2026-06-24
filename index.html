@@ -19953,7 +19953,10 @@
                 if (!user) return;
                 const q = window.query(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory'));
                 const unsubscribeSnapshot = window.onSnapshot(q, (snapshot) => {
-                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    // Filter item yang sama sekali tidak punya field 'name' (data rusak)
+                    const data = snapshot.docs
+                        .map(doc => ({ id: doc.id, ...doc.data() }))
+                        .filter(item => item !== null && item !== undefined);
                     setRawInventory(data); // Save raw data
                     setLoading(false);
                 }, (error) => { console.error("Firestore Error:", error); showToast("Gagal memuat data live", "error"); });
@@ -19988,12 +19991,22 @@
 
                     return {
                         ...item,
-                        qty: displayQty, // Override qty for display/logic
-                        _originalQty: item.qty, // Keep ref just in case
-                        _breakdown: breakdown // Simpan data rincian toko
+                        // Pastikan semua field string tidak undefined (cegah crash di seluruh view)
+                        name:      item.name      || '',
+                        unit:      item.unit      || 'Pcs',
+                        rack:      item.rack      || '-',
+                        exp:       item.exp       || '',
+                        batchNo:   item.batchNo   || '',
+                        // Pastikan field angka tidak undefined
+                        price:     item.price     || 0,
+                        costPrice: item.costPrice || 0,
+                        minStock:  item.minStock  || 0,
+                        qty:       displayQty,
+                        _originalQty: item.qty,
+                        _breakdown:   breakdown,
                     };
                 });
-                processed.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                processed.sort((a, b) => a.name.localeCompare(b.name));
                 setInventoryData(processed);
             }, [rawInventory, activeStoreId, settingsData]);
 
