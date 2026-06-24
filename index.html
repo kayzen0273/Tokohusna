@@ -2106,7 +2106,7 @@
                 const usersRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
                 const unsub = window.onSnapshot(usersRef, (snap) => {
                     const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    data.sort((a, b) => a.namaLengkap?.localeCompare(b.namaLengkap));
+                    data.sort((a, b) => (a.namaLengkap || '').localeCompare(b.namaLengkap || ''));
                     setUsers(data);
                     setLoadingUsers(false);
                 });
@@ -4676,7 +4676,7 @@
                             isCheapest: row.price === cheapestPrice
                         }))
                     };
-                }).sort((a, b) => a.itemName.localeCompare(b.itemName, 'id'));
+                }).sort((a, b) => (a.itemName || '').localeCompare(b.itemName || '', 'id'));
                 return result;
             }, [storePurchases]);
 
@@ -7290,7 +7290,7 @@
                         .map(d => ({ id: d.id, ...d.data() }))
                         .map(u => ({ name: u.namaLengkap || u.username, isActive: u.isActive !== false }))
                         .filter(u => u.name)
-                        .sort((a, b) => a.name.localeCompare(b.name));
+                        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
                     setRegisteredUsers(users);
                 });
                 return () => unsub();
@@ -10128,7 +10128,7 @@
                         .map(d => ({ id: d.id, ...d.data() }))
                         .map(u => ({ name: u.namaLengkap || u.username, isActive: u.isActive !== false }))
                         .filter(u => u.name)
-                        .sort((a, b) => a.name.localeCompare(b.name));
+                        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
                     setRegisteredUsers(users);
                 });
                 return () => unsub();
@@ -17151,7 +17151,7 @@
                 if (activeFilterSupplier.length > 0) data = data.filter(b => activeFilterSupplier.includes(b.supplier));
                 if (sortBy === 'ed_asc') data.sort((a,b) => (a.daysLeft??99999) - (b.daysLeft??99999));
                 else if (sortBy === 'ed_desc') data.sort((a,b) => (b.daysLeft??99999) - (a.daysLeft??99999));
-                else data.sort((a,b) => a.name.localeCompare(b.name));
+                else data.sort((a,b) => (a.name || '').localeCompare(b.name || ''));
                 return data;
             }, [allBatches, searchQuery, filterStatus, detailFilter, sortBy, activeFilterED, activeFilterSupplier]);
 
@@ -17628,8 +17628,8 @@
 
             // Sort
             filteredItems.sort((a, b) => {
-                if (sortBy === 'name_asc') return a.name.localeCompare(b.name, 'id');
-                if (sortBy === 'name_desc') return b.name.localeCompare(a.name, 'id');
+                if (sortBy === 'name_asc') return (a.name || '').localeCompare(b.name || '', 'id');
+                if (sortBy === 'name_desc') return (b.name || '').localeCompare(a.name || '', 'id');
                 if (sortBy === 'qty_asc') return (Number(a.qty)||0) - (Number(b.qty)||0);
                 if (sortBy === 'qty_desc') return (Number(b.qty)||0) - (Number(a.qty)||0);
                 if (sortBy === 'exp_asc') {
@@ -18109,7 +18109,7 @@
                     return item.name?.toLowerCase().includes(search.toLowerCase());
                 })
                 .map(item => ({ ...item, _storeQty: getStoreStock(item, fromStore) }))
-                .sort((a, b) => a.name.localeCompare(b.name));
+                .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
             const handleAddToCart = (item) => {
                 if (cartIds.has(item.id)) return;
@@ -19993,7 +19993,7 @@
                         _breakdown: breakdown // Simpan data rincian toko
                     };
                 });
-                processed.sort((a, b) => a.name.localeCompare(b.name));
+                processed.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
                 setInventoryData(processed);
             }, [rawInventory, activeStoreId, settingsData]);
 
@@ -20044,7 +20044,7 @@
                         racks.forEach(r => { if (!r) return; if (!rackMap.has(r)) rackMap.set(r, { name: r, hasNew: false }); if (isItemNew) rackMap.get(r).hasNew = true; });
                     }
                 });
-                return Array.from(rackMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+                return Array.from(rackMap.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
             }, [inventoryData]);
 
             const getCurrentProfile = () => { 
