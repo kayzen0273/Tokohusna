@@ -5,6 +5,412 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sistem Kasir Toko Husna (V71 - Mode Offline dengan Sinkronisasi Otomatis)</title>
     
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#f0fdf4', 100: '#dcfce7', 500: '#22c55e', 600: '#16a34a', 700: '#15803d', 900: '#14532d' },
+                        gold: { 100: '#fef9c3', 200: '#fef08a', 300: '#fde047', 400: '#facc15', 500: '#eab308', 600: '#ca8a04', 700: '#a16207' },
+                        husna: { light: '#0ea5e9', dark: '#0284c7', bg: '#f0f9ff' },
+                        night: { 800: '#1e293b', 900: '#0f172a' },
+                        ketupat: { light: '#86efac', dark: '#15803d' }
+                    },
+                    fontFamily: { sans: ['Inter', 'Plus Jakarta Sans', 'sans-serif'], mono: ['Courier Prime', 'Courier New', 'monospace'] },
+                    boxShadow: { 'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)', 'glow': '0 0 20px rgba(250, 204, 21, 0.4)' },
+                    animation: {
+                        'sway': 'sway 3s ease-in-out infinite alternate',
+                        'sway-slow': 'sway 5s ease-in-out infinite alternate-reverse',
+                        'swing': 'swing 3s ease-in-out infinite alternate',
+                        'swing-slow': 'swing 4.5s ease-in-out infinite alternate',
+                        'twinkle': 'twinkle 4s ease-in-out infinite',
+                        'float': 'float 6s ease-in-out infinite',
+                        'float-up': 'floatUp 10s linear infinite',
+                        'type-reveal': 'typeReveal 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards',
+                        'pop-in': 'popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+                        'falling-star': 'fallingStar 4s linear infinite',
+                        'coin-spin': 'coinSpin 3s linear infinite',
+                        'slide-up': 'slideUp 8s linear infinite',
+                        'scan-line': 'scanLine 2s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        sway: { from: { transform: 'rotate(-5deg)' }, to: { transform: 'rotate(5deg)' } },
+                        swing: { '0%': { transform: 'rotate(-10deg)' }, '100%': { transform: 'rotate(10deg)' } },
+                        typeReveal: { '0%': { width: '0%', opacity: '0' }, '100%': { width: '100%', opacity: '1' } },
+                        popIn: { '0%': { opacity: '0', transform: 'scale(0.5)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
+                        fallingStar: { '0%': { transform: 'translate(0, 0) rotate(35deg)', opacity: 0 }, '20%': { opacity: 1 }, '100%': { transform: 'translate(-200px, 200px) rotate(35deg)', opacity: 0 } },
+                        floatUp: { '0%': { transform: 'translateY(100vh) scale(0.5)', opacity: 0 }, '20%': { opacity: 0.6 }, '80%': { opacity: 0.6 }, '100%': { transform: 'translateY(-10vh) scale(1)', opacity: 0 } },
+                        coinSpin: { '0%': { transform: 'rotateY(0deg)' }, '100%': { transform: 'rotateY(360deg)' } },
+                        slideUp: { '0%': { transform: 'translateY(100vh)', opacity: 0 }, '10%': { opacity: 0.7 }, '90%': { opacity: 0.7 }, '100%': { transform: 'translateY(-20vh)', opacity: 0 } },
+                        scanLine: { '0%, 100%': { top: '0%', opacity: 0.8 }, '50%': { top: '100%', opacity: 0.4 } },
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- React & Dependencies -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- HTML2Canvas (Untuk Generate JPG) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <!-- Fonts & Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Amiri:wght@400;700&family=Courier+Prime:wght@400;700&family=Caveat:wght@400;500;600;700&family=Kalam:wght@400;700&family=Dancing+Script:wght@400;600;700&family=Quicksand:wght@400;600;700&family=Indie+Flower&family=Patrick+Hand&family=Pacifico&family=Permanent+Marker&family=Special+Elite&family=Shadows+Into+Light&family=Amatic+SC:wght@400;700&family=Gloria+Hallelujah&family=Lobster&family=Fredoka+One&family=Comfortaa:wght@400;600;700&family=Nunito:wght@400;600;700;800&family=Righteous&display=swap" rel="stylesheet">
+
+    <!-- Fuse.js -->
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+
+    <!-- ExcelJS for Excel Export with Full Styling Support -->
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
+
+    <!-- ================================================
+         SUPABASE SDK + Firebase Compatibility Layer
+         Menggantikan Firebase Firestore & Firebase Auth
+         Project : https://mnuunkrkoeqjzbxceodc.supabase.co
+         ================================================ -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+    (function () {
+        'use strict';
+
+        /* ── KONFIGURASI SUPABASE ───────────────────────────────────── */
+        const SUPABASE_URL  = "https://mnuunkrkoeqjzbxceodc.supabase.co";
+        const SUPABASE_KEY  = "sb_publishable_y4wpNCwGFOrPKBrVDwv7MA_yrgCzPWF";
+
+        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        window._supabase = sb; // raw client untuk debugging
+
+        const APP_ID = (typeof __app_id !== 'undefined') ? __app_id : 'default-app-id';
+
+        /* ── PATH PARSER ────────────────────────────────────────────────
+           Firebase paths:
+             artifacts/{appId}/public/data/{collection}/{docId}
+             artifacts/{appId}/users/{uid}/{collection}/{docId}
+        ──────────────────────────────────────────────────────────────── */
+        function parsePath(segments) {
+            const flat = segments.flat().filter(s => s != null && s !== '');
+            // Pattern 1 → .../public/data/{col}/{id}
+            const di = flat.indexOf('data');
+            if (di !== -1 && flat[di + 1]) {
+                return { col: flat[di + 1], id: flat[di + 2] || null };
+            }
+            // Pattern 2 → .../users/{uid}/{col}/{id}  (private catatan)
+            const ui = flat.indexOf('users');
+            if (ui !== -1 && flat[ui + 2]) {
+                return { col: flat[ui + 2] + '_private', id: flat[ui + 3] || null };
+            }
+            // Fallback
+            return { col: flat[flat.length - 2] || flat[flat.length - 1], id: null };
+        }
+
+        /* ── KOLOM EXTRACTED untuk sorting & filtering ──────────────── */
+        const SORT_MAP = {
+            date: '_date', name: '_name',
+            createdAt: '_createdat', updatedAt: '_updatedat',
+            position: '_position'
+        };
+        const FILTER_MAP = {
+            username: '_username', email: '_email',
+            isActive: '_isactive', cashierName: '_cashiername',
+            storeId: '_storeid', profileId: '_profileid',
+            status: '_status'
+        };
+
+        function extractCols(data) {
+            return {
+                _name:        data.name        != null ? String(data.name)        : null,
+                _date:        data.date        != null ? String(data.date)        : null,
+                _createdat:   data.createdAt   != null ? String(data.createdAt)   : null,
+                _updatedat:   data.updatedAt   != null ? String(data.updatedAt)   : null,
+                _position:    data.position    != null ? Number(data.position)    : null,
+                _username:    data.username    != null ? String(data.username)    : null,
+                _email:       data.email       != null ? String(data.email)       : null,
+                _isactive:    data.isActive    != null ? Boolean(data.isActive)   : null,
+                _cashiername: data.cashierName != null ? String(data.cashierName) : null,
+                _storeid:     data.storeId     != null ? String(data.storeId)     : null,
+                _profileid:   data.profileId   != null ? String(data.profileId)   : null,
+                _status:      data.status      != null ? String(data.status)      : null,
+            };
+        }
+
+        /* ── QUERY BUILDER HELPERS ──────────────────────────────────── */
+        function applyOrderBy(q, field, dir) {
+            const asc = dir !== 'desc';
+            const col = SORT_MAP[field];
+            if (col) return q.order(col, { ascending: asc, nullsFirst: false });
+            // fallback JSONB text cast
+            return q.order(`data->>'${field}'`, { ascending: asc, nullsFirst: false });
+        }
+
+        function applyWhere(q, field, op, value) {
+            const col = FILTER_MAP[field];
+            if (col) {
+                if (op === '==')  return q.eq(col, value);
+                if (op === '!=')  return q.neq(col, value);
+                if (op === '<')   return q.lt(col, value);
+                if (op === '<=')  return q.lte(col, value);
+                if (op === '>')   return q.gt(col, value);
+                if (op === '>=')  return q.gte(col, value);
+                if (op === 'in')  return q.in(col, value);
+            }
+            // Fallback: JSONB filter
+            const sv = value != null ? String(value) : '';
+            if (op === '==')           return q.filter(`data->>'${field}'`, 'eq',  sv);
+            if (op === '!=')           return q.filter(`data->>'${field}'`, 'neq', sv);
+            if (op === '<')            return q.filter(`data->>'${field}'`, 'lt',  sv);
+            if (op === '<=')           return q.filter(`data->>'${field}'`, 'lte', sv);
+            if (op === '>')            return q.filter(`data->>'${field}'`, 'gt',  sv);
+            if (op === '>=')           return q.filter(`data->>'${field}'`, 'gte', sv);
+            if (op === 'array-contains') return q.filter(`data->'${field}'`, 'cs', JSON.stringify([value]));
+            if (op === 'in')           return q.filter(`data->>'${field}'`, 'in', `(${value.map(v=>`"${v}"`).join(',')})`);
+            return q;
+        }
+
+        /* ── ID GENERATOR ───────────────────────────────────────────── */
+        function genId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2, 8);
+        }
+
+        /* ── SERIALIZER ─────────────────────────────────────────────── */
+        function serialize(data) {
+            const r = {};
+            for (const [k, v] of Object.entries(data)) {
+                if (v === undefined)                             r[k] = null;
+                else if (v && typeof v === 'object' && v._isServerTimestamp) r[k] = new Date().toISOString();
+                else                                             r[k] = v;
+            }
+            return r;
+        }
+
+        /* ── FIRESTORE-COMPATIBLE FUNCTIONS ─────────────────────────── */
+
+        function collection(db, ...args) {
+            const { col } = parsePath(args);
+            return { _type: 'col', _col: col, _constraints: [] };
+        }
+
+        function doc(db, ...args) {
+            const { col, id } = parsePath(args);
+            return { _type: 'doc', _col: col, _id: id };
+        }
+
+        function serverTimestamp() { return new Date().toISOString(); }
+
+        /* addDoc */
+        async function addDoc(ref, data) {
+            const id  = genId();
+            const cln = serialize(data);
+            const { error } = await sb.from(ref._col).insert({ id, data: cln, ...extractCols(cln) });
+            if (error) { console.error('[addDoc]', ref._col, error.message); throw error; }
+            return { id };
+        }
+
+        /* setDoc */
+        async function setDoc(ref, data) {
+            const cln = serialize(data);
+            const { error } = await sb.from(ref._col).upsert({ id: ref._id, data: cln, ...extractCols(cln) }, { onConflict: 'id' });
+            if (error) { console.error('[setDoc]', ref._col, error.message); throw error; }
+        }
+
+        /* updateDoc  — handles increment({_inc:n}) sentinels */
+        async function updateDoc(ref, updates) {
+            const hasInc = Object.values(updates).some(v => v && typeof v === 'object' && '_inc' in v);
+
+            /* fetch current row */
+            const { data: row, error: fe } = await sb.from(ref._col)
+                .select('data').eq('id', ref._id).maybeSingle();
+            if (fe) { console.error('[updateDoc fetch]', ref._col, fe.message); throw fe; }
+
+            const cur = row?.data || {};
+            const merged = { ...cur };
+
+            for (const [k, v] of Object.entries(updates)) {
+                if (v && typeof v === 'object' && '_inc' in v) {
+                    merged[k] = (Number(cur[k]) || 0) + v._inc;
+                } else if (v && typeof v === 'object' && v._isServerTimestamp) {
+                    merged[k] = new Date().toISOString();
+                } else {
+                    merged[k] = v;
+                }
+            }
+
+            const cln = serialize(merged);
+            const { error } = await sb.from(ref._col)
+                .update({ data: cln, ...extractCols(cln) }).eq('id', ref._id);
+            if (error) { console.error('[updateDoc]', ref._col, error.message); throw error; }
+        }
+
+        /* deleteDoc */
+        async function deleteDoc(ref) {
+            const { error } = await sb.from(ref._col).delete().eq('id', ref._id);
+            if (error) { console.error('[deleteDoc]', ref._col, error.message); throw error; }
+        }
+
+        /* getDoc */
+        async function getDoc(ref) {
+            const { data, error } = await sb.from(ref._col)
+                .select('id, data').eq('id', ref._id).maybeSingle();
+            if (error) { console.error('[getDoc]', ref._col, error.message); throw error; }
+            return {
+                id: ref._id,
+                exists: () => !!data,
+                data:   () => data ? { id: data.id, ...data.data } : null,
+            };
+        }
+
+        /* getDocs */
+        async function getDocs(queryRef) {
+            let q = sb.from(queryRef._col).select('id, data');
+            for (const c of (queryRef._constraints || [])) {
+                if      (c._type === 'orderBy') q = applyOrderBy(q, c._field, c._dir);
+                else if (c._type === 'where')   q = applyWhere(q, c._field, c._op, c._value);
+                else if (c._type === 'limit')   q = q.limit(c._n);
+            }
+            const { data, error } = await q;
+            if (error) { console.error('[getDocs]', queryRef._col, error.message); throw error; }
+            const docs = (data || []).map(row => ({
+                id:     row.id,
+                exists: () => true,
+                data:   () => ({ id: row.id, ...row.data }),
+            }));
+            return { docs, empty: docs.length === 0, forEach: fn => docs.forEach(fn) };
+        }
+
+        /* onSnapshot — realtime via Supabase channels */
+        function onSnapshot(ref, callbackOrOpts, onError) {
+            const cb    = typeof callbackOrOpts === 'function' ? callbackOrOpts : callbackOrOpts;
+            const errCb = typeof onError === 'function' ? onError : null;
+            let active  = true;
+
+            const fetch = async () => {
+                if (!active) return;
+                try {
+                    if (ref._type === 'doc') cb(await getDoc(ref));
+                    else                     cb(await getDocs(ref));
+                } catch (e) {
+                    console.error('[onSnapshot]', e);
+                    if (errCb) errCb(e);
+                }
+            };
+
+            fetch(); // initial load
+
+            const chanId = `rt_${ref._col}_${genId()}`;
+            const pgOpts = { event: '*', schema: 'public', table: ref._col };
+            if (ref._type === 'doc' && ref._id) pgOpts.filter = `id=eq.${ref._id}`;
+
+            const chan = sb.channel(chanId)
+                .on('postgres_changes', pgOpts, fetch)
+                .subscribe(s => {
+                    if (s === 'SUBSCRIPTION_ERROR')
+                        console.warn('[onSnapshot] realtime error on', ref._col);
+                });
+
+            return () => { active = false; sb.removeChannel(chan); };
+        }
+
+        /* query / orderBy / where / limit / increment / writeBatch */
+        function query(ref, ...constraints) {
+            return { ...ref, _constraints: [...(ref._constraints || []), ...constraints] };
+        }
+        function orderBy(field, dir = 'asc')      { return { _type: 'orderBy', _field: field, _dir: dir }; }
+        function where(field, op, value)           { return { _type: 'where',   _field: field, _op: op, _value: value }; }
+        function limit(n)                          { return { _type: 'limit',   _n: n }; }
+        function increment(n)                      { return { _inc: n }; }  // sentinel
+
+        function writeBatch() {
+            const ops = [];
+            return {
+                set:    (ref, data, opts) => ops.push({ t: 'set',    ref, data, opts }),
+                update: (ref, data)       => ops.push({ t: 'update', ref, data }),
+                delete: (ref)             => ops.push({ t: 'delete', ref }),
+                commit: async () => {
+                    for (const op of ops) {
+                        if      (op.t === 'set')    await setDoc(op.ref, op.data, op.opts);
+                        else if (op.t === 'update') await updateDoc(op.ref, op.data);
+                        else if (op.t === 'delete') await deleteDoc(op.ref);
+                    }
+                }
+            };
+        }
+
+        /* ── AUTH COMPATIBILITY ─────────────────────────────────────── */
+        const auth = { currentUser: null, _cbs: [] };
+
+        sb.auth.onAuthStateChange((event, session) => {
+            const u = session?.user;
+            auth.currentUser = u
+                ? { uid: u.id, id: u.id, email: u.email || null,
+                    isAnonymous: !u.email,
+                    displayName: u.user_metadata?.full_name || null, ...u }
+                : null;
+            auth._cbs.forEach(fn => fn(auth.currentUser));
+        });
+
+        async function signInAnonymously(_auth) {
+            const { data, error } = await sb.auth.signInAnonymously();
+            if (error) throw error;
+            const u = data?.user;
+            return { user: u ? { uid: u.id, ...u } : null };
+        }
+
+        async function signInWithCustomToken(_auth, token) {
+            try {
+                const { data, error } = await sb.auth.setSession(
+                    { access_token: token, refresh_token: token });
+                if (!error && data?.user) return { user: { uid: data.user.id, ...data.user } };
+            } catch (e) {}
+            return signInAnonymously(_auth);
+        }
+
+        function onAuthStateChanged(_auth, callback) {
+            _auth._cbs.push(callback);
+            sb.auth.getSession().then(({ data }) => {
+                const u = data?.session?.user;
+                const fb = u ? { uid: u.id, id: u.id, email: u.email || null,
+                                  isAnonymous: !u.email, ...u } : null;
+                auth.currentUser = fb;
+                callback(fb);
+            });
+            return () => { _auth._cbs = _auth._cbs.filter(f => f !== callback); };
+        }
+
+        /* ── EXPOSE KE WINDOW (sama persis seperti Firebase) ─────────── */
+        window.db                  = sb;   // raw supabase client sebagai pengganti Firestore
+        window.auth                = auth;
+        window.signInAnonymously   = signInAnonymously;
+        window.signInWithCustomToken = signInWithCustomToken;
+        window.onAuthStateChanged  = onAuthStateChanged;
+        window.collection          = collection;
+        window.addDoc              = addDoc;
+        window.updateDoc           = updateDoc;
+        window.deleteDoc           = deleteDoc;
+        window.setDoc              = setDoc;
+        window.getDoc              = getDoc;
+        window.getDocs             = getDocs;
+        window.doc                 = doc;
+        window.onSnapshot          = onSnapshot;
+        window.serverTimestamp     = serverTimestamp;
+        window.writeBatch          = writeBatch;
+        window.query               = query;
+        window.orderBy             = orderBy;
+        window.where               = where;
+        window.increment           = increment;
+        window.limit               = limit;
+        window.appId               = APP_ID;
+        window.initialAuthToken    = (typeof __initial_auth_token !== 'undefined')
+                                      ? __initial_auth_token : null;
+
+        console.log('[Supabase] Compatibility layer aktif →', SUPABASE_URL);
+    })();
+    </script>
+
     <style>
         html, body { overscroll-behavior-y: none; }
         body { font-family: 'Inter', sans-serif; background-color: #ffffff; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
@@ -173,602 +579,7 @@
     </style>
 </head>
 <body class="relative">
-    <!-- ═══════════════════════════════════════════════════════════════════
-         BOOT OVERLAY — tampil instan tanpa menunggu CDN apapun
-         Ditaruh paling atas di <body> + CSS inline, supaya browser bisa
-         langsung mengecat ini begitu HTML-nya sampai, walau koneksi lambat.
-         Dihapus otomatis oleh aplikasi React setelah berhasil render.
-         ═══════════════════════════════════════════════════════════════════ -->
-    <div id="boot-loading" style="position:fixed;inset:0;z-index:99999;background:#ffffff;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;text-align:center;padding:24px;">
-        <style>
-            @keyframes bootSpin { to { transform: rotate(360deg); } }
-            #boot-spinner { width:40px;height:40px;border-radius:50%;border:4px solid #e2e8f0;border-top-color:#0ea5e9;animation:bootSpin 0.8s linear infinite; }
-        </style>
-        <div id="boot-spinner"></div>
-        <div id="boot-text" style="color:#0f172a;font-size:14px;font-weight:600;">Memuat Sistem Kasir Husna…</div>
-        <div id="boot-subtext" style="color:#64748b;font-size:12.5px;max-width:280px;"></div>
-        <button id="boot-reload-btn" onclick="location.reload()" style="display:none;margin-top:6px;padding:10px 20px;background:#0ea5e9;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">Muat Ulang</button>
-    </div>
-    <script>
-    (function () {
-        var startedAt = Date.now();
-        var bootEl = document.getElementById('boot-loading');
-        var textEl = document.getElementById('boot-text');
-        var subEl  = document.getElementById('boot-subtext');
-        var btnEl  = document.getElementById('boot-reload-btn');
-        var doneOrFailed = false;
-
-        function showSlowHint() {
-            if (doneOrFailed) return;
-            subEl.textContent = 'Koneksi lambat terdeteksi, mohon tunggu sebentar lagi…';
-        }
-        function showError(msg) {
-            if (doneOrFailed) return;
-            doneOrFailed = true;
-            if (bootEl) bootEl.style.display = 'flex';
-            document.getElementById('boot-spinner').style.display = 'none';
-            textEl.textContent = 'Gagal memuat aplikasi';
-            subEl.textContent = msg || 'Terjadi kesalahan. Coba periksa koneksi internet Anda lalu muat ulang.';
-            btnEl.style.display = 'inline-block';
-        }
-
-        // Resource (script/link) gagal dimuat (mis. CDN down / koneksi putus)
-        window.addEventListener('error', function (e) {
-            var tgt = e.target;
-            if (tgt && tgt.tagName && (tgt.tagName === 'SCRIPT' || tgt.tagName === 'LINK')) {
-                showError('Gagal memuat salah satu file pendukung (' + (tgt.src || tgt.href || 'resource') + '). Periksa koneksi internet Anda.');
-            } else if (e.message) {
-                showError('Terjadi error: ' + e.message);
-            }
-        }, true);
-
-        window.addEventListener('unhandledrejection', function (e) {
-            console.warn('Unhandled promise rejection:', e.reason);
-        });
-
-        setTimeout(showSlowHint, 7000);
-        setTimeout(function () {
-            if (!doneOrFailed) showError('Proses masih berjalan terlalu lama. Koneksi mungkin sangat lambat — coba muat ulang atau pindah ke WiFi/sinyal yang lebih stabil.');
-        }, 25000);
-
-        // Dipanggil oleh aplikasi React setelah berhasil mount
-        window.__bootDone = function () {
-            doneOrFailed = true;
-            if (bootEl) bootEl.remove();
-        };
-    })();
-    </script>
-
     <div id="root" class="relative z-10"></div>
-
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        brand: { 50: '#f0fdf4', 100: '#dcfce7', 500: '#22c55e', 600: '#16a34a', 700: '#15803d', 900: '#14532d' },
-                        gold: { 100: '#fef9c3', 200: '#fef08a', 300: '#fde047', 400: '#facc15', 500: '#eab308', 600: '#ca8a04', 700: '#a16207' },
-                        husna: { light: '#0ea5e9', dark: '#0284c7', bg: '#f0f9ff' },
-                        night: { 800: '#1e293b', 900: '#0f172a' },
-                        ketupat: { light: '#86efac', dark: '#15803d' }
-                    },
-                    fontFamily: { sans: ['Inter', 'Plus Jakarta Sans', 'sans-serif'], mono: ['Courier Prime', 'Courier New', 'monospace'] },
-                    boxShadow: { 'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)', 'glow': '0 0 20px rgba(250, 204, 21, 0.4)' },
-                    animation: {
-                        'sway': 'sway 3s ease-in-out infinite alternate',
-                        'sway-slow': 'sway 5s ease-in-out infinite alternate-reverse',
-                        'swing': 'swing 3s ease-in-out infinite alternate',
-                        'swing-slow': 'swing 4.5s ease-in-out infinite alternate',
-                        'twinkle': 'twinkle 4s ease-in-out infinite',
-                        'float': 'float 6s ease-in-out infinite',
-                        'float-up': 'floatUp 10s linear infinite',
-                        'type-reveal': 'typeReveal 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards',
-                        'pop-in': 'popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
-                        'falling-star': 'fallingStar 4s linear infinite',
-                        'coin-spin': 'coinSpin 3s linear infinite',
-                        'slide-up': 'slideUp 8s linear infinite',
-                        'scan-line': 'scanLine 2s ease-in-out infinite',
-                    },
-                    keyframes: {
-                        sway: { from: { transform: 'rotate(-5deg)' }, to: { transform: 'rotate(5deg)' } },
-                        swing: { '0%': { transform: 'rotate(-10deg)' }, '100%': { transform: 'rotate(10deg)' } },
-                        typeReveal: { '0%': { width: '0%', opacity: '0' }, '100%': { width: '100%', opacity: '1' } },
-                        popIn: { '0%': { opacity: '0', transform: 'scale(0.5)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
-                        fallingStar: { '0%': { transform: 'translate(0, 0) rotate(35deg)', opacity: 0 }, '20%': { opacity: 1 }, '100%': { transform: 'translate(-200px, 200px) rotate(35deg)', opacity: 0 } },
-                        floatUp: { '0%': { transform: 'translateY(100vh) scale(0.5)', opacity: 0 }, '20%': { opacity: 0.6 }, '80%': { opacity: 0.6 }, '100%': { transform: 'translateY(-10vh) scale(1)', opacity: 0 } },
-                        coinSpin: { '0%': { transform: 'rotateY(0deg)' }, '100%': { transform: 'rotateY(360deg)' } },
-                        slideUp: { '0%': { transform: 'translateY(100vh)', opacity: 0 }, '10%': { opacity: 0.7 }, '90%': { opacity: 0.7 }, '100%': { transform: 'translateY(-20vh)', opacity: 0 } },
-                        scanLine: { '0%, 100%': { top: '0%', opacity: 0.8 }, '50%': { top: '100%', opacity: 0.4 } },
-                    }
-                }
-            }
-        }
-    </script>
-    
-    <!-- React & Dependencies -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
-    
-    <!-- HTML2Canvas (Untuk Generate JPG) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    
-    <!-- Fonts & Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
-    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Amiri:wght@400;700&family=Courier+Prime:wght@400;700&family=Caveat:wght@400;500;600;700&family=Kalam:wght@400;700&family=Dancing+Script:wght@400;600;700&family=Quicksand:wght@400;600;700&family=Indie+Flower&family=Patrick+Hand&family=Pacifico&family=Permanent+Marker&family=Special+Elite&family=Shadows+Into+Light&family=Amatic+SC:wght@400;700&family=Gloria+Hallelujah&family=Lobster&family=Fredoka+One&family=Comfortaa:wght@400;600;700&family=Nunito:wght@400;600;700;800&family=Righteous&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-    <noscript>    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Amiri:wght@400;700&family=Courier+Prime:wght@400;700&family=Caveat:wght@400;500;600;700&family=Kalam:wght@400;700&family=Dancing+Script:wght@400;600;700&family=Quicksand:wght@400;600;700&family=Indie+Flower&family=Patrick+Hand&family=Pacifico&family=Permanent+Marker&family=Special+Elite&family=Shadows+Into+Light&family=Amatic+SC:wght@400;700&family=Gloria+Hallelujah&family=Lobster&family=Fredoka+One&family=Comfortaa:wght@400;600;700&family=Nunito:wght@400;600;700;800&family=Righteous&display=swap" rel="stylesheet"></noscript>
-
-    <!-- Fuse.js -->
-    <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
-
-    <!-- ExcelJS for Excel Export with Full Styling Support -->
-    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
-
-    <!-- ═══════════════════════════════════════════════════════════════════
-         SUPABASE SDK + ADAPTER (Pengganti Firebase Firestore)
-         Dibuat otomatis — semua window.addDoc / window.onSnapshot tetap berjalan
-         ═══════════════════════════════════════════════════════════════════ -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script>
-    (function () {
-        // ─── KONFIGURASI ─────────────────────────────────────────────────────────
-        const SUPABASE_URL = 'https://mnuunkrkoeqjzbxceodc.supabase.co';
-        const SUPABASE_KEY = 'sb_publishable_y4wpNCwGFOrPKBrVDwv7MA_yrgCzPWF';
-        // ─────────────────────────────────────────────────────────────────────────
-        // SETUP SUPABASE:
-        // 1. Jalankan SQL ini di Supabase SQL Editor:
-        //
-        //    CREATE TABLE IF NOT EXISTS firestore_documents (
-        //      path_key        TEXT PRIMARY KEY,
-        //      app_id          TEXT NOT NULL,
-        //      collection_name TEXT NOT NULL,
-        //      doc_id          TEXT NOT NULL,
-        //      data            JSONB NOT NULL DEFAULT '{}',
-        //      created_at      TIMESTAMPTZ DEFAULT NOW(),
-        //      updated_at      TIMESTAMPTZ DEFAULT NOW()
-        //    );
-        //    CREATE INDEX IF NOT EXISTS idx_fdocs_col
-        //      ON firestore_documents(app_id, collection_name);
-        //    ALTER PUBLICATION supabase_realtime ADD TABLE firestore_documents;
-        //
-        // 2. Aktifkan Row Level Security (RLS) sesuai kebutuhan keamanan Anda.
-        // 3. Ganti SUPABASE_KEY di atas dengan Anon Key dari Project Settings.
-        // ─────────────────────────────────────────────────────────────────────────
-
-        // Init Supabase client (untuk Realtime)
-        const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-            auth: { persistSession: false, autoRefreshToken: false },
-            realtime: { params: { eventsPerSecond: 10 } }
-        });
-        window._supabaseClient = _sb;
-
-        // ── UUID generator ────────────────────────────────────────────────────────
-        function _uid() {
-            try {
-                return crypto.randomUUID();
-            } catch {
-                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-                    const r = Math.random() * 16 | 0;
-                    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-                });
-            }
-        }
-
-        // ── Path key (primary key di Supabase) ───────────────────────────────────
-        function _pk(appId, coll, docId) {
-            return appId + '::' + coll + '::' + docId;
-        }
-
-        // ── Nested get/set (untuk dotted keys, mis. "stocks.toko1") ─────────────
-        function _getNested(obj, key) {
-            if (!obj || !key) return undefined;
-            if (!key.includes('.')) return obj[key];
-            return key.split('.').reduce((acc, k) => (acc != null ? acc[k] : undefined), obj);
-        }
-        function _setNested(obj, key, val) {
-            if (!key.includes('.')) { obj[key] = val; return; }
-            const parts = key.split('.');
-            let cur = obj;
-            for (let i = 0; i < parts.length - 1; i++) {
-                if (cur[parts[i]] == null || typeof cur[parts[i]] !== 'object') cur[parts[i]] = {};
-                cur = cur[parts[i]];
-            }
-            cur[parts[parts.length - 1]] = val;
-        }
-
-        // ── Resolve sentinel values + dotted keys ─────────────────────────────────
-        // Mengubah serverTimestamp() → ISO string, increment(n) → nilai numerik baru
-        function _resolve(incoming, existing) {
-            const base = existing ? JSON.parse(JSON.stringify(existing)) : {};
-            for (const [k, v] of Object.entries(incoming)) {
-                if (v && typeof v === 'object' && v.__sb_ts) {
-                    _setNested(base, k, new Date().toISOString());
-                } else if (v && typeof v === 'object' && v.__sb_inc !== undefined) {
-                    const cur = _getNested(base, k);
-                    _setNested(base, k, (typeof cur === 'number' ? cur : 0) + v.__sb_inc);
-                } else {
-                    _setNested(base, k, v);
-                }
-            }
-            return base;
-        }
-
-        // ── Parse path args → { appId, collectionName, docId? } ─────────────────
-        // Format standar: artifacts / {appId} / public / data / {collName} [/ {docId}]
-        // Format private: artifacts / {appId} / users  / {uid} / {collName} [/ {docId}]
-        function _parse(segs) {
-            const s = segs.filter(x => typeof x === 'string');
-            const appId = s[1] || (window.appId || 'default-app-id');
-            let coll, docId;
-            if (s[2] === 'public' && s[3] === 'data') {
-                coll  = s[4];
-                docId = s[5];
-            } else if (s[2] === 'users') {
-                coll  = '__priv_' + s[3] + '_' + s[4];
-                docId = s[5];
-            } else {
-                coll  = s[s.length - 2];
-                docId = s[s.length - 1];
-            }
-            return { appId, coll, docId };
-        }
-
-        // ── Supabase SDK helpers (kompatibel sb_publishable & JWT key) ───────────
-        async function _fetchCol(appId, coll) {
-            const { data, error } = await _sb
-                .from('firestore_documents')
-                .select('doc_id,data')
-                .eq('app_id', appId)
-                .eq('collection_name', coll);
-            if (error) { console.error('[Supabase] fetchCol', error); throw new Error(error.details || error.message || JSON.stringify(error)); }
-            return (data || []).map(r => ({ id: r.doc_id, ...r.data }));
-        }
-        async function _fetchDoc(appId, coll, docId) {
-            const { data, error } = await _sb
-                .from('firestore_documents')
-                .select('doc_id,data')
-                .eq('path_key', _pk(appId, coll, docId))
-                .maybeSingle();
-            if (error) { console.error('[Supabase] fetchDoc', error); throw new Error(error.details || error.message || JSON.stringify(error)); }
-            return data ? { id: data.doc_id, ...data.data } : null;
-        }
-        async function _upsertSdk(appId, coll, docId, processed) {
-            const { error } = await _sb
-                .from('firestore_documents')
-                .upsert(
-                    { path_key: _pk(appId, coll, docId), app_id: appId, collection_name: coll, doc_id: docId, data: processed, updated_at: new Date().toISOString() },
-                    { onConflict: 'path_key' }
-                );
-            if (error) { console.error('[Supabase] upsert', error); throw new Error(error.details || error.message || JSON.stringify(error)); }
-        }
-        async function _patchSdk(appId, coll, docId, updated) {
-            const { error } = await _sb
-                .from('firestore_documents')
-                .update({ data: updated, updated_at: new Date().toISOString() })
-                .eq('path_key', _pk(appId, coll, docId));
-            if (error) { console.error('[Supabase] patch', error); throw new Error(error.details || error.message || JSON.stringify(error)); }
-        }
-        async function _deleteSdk(appId, coll, docId) {
-            const { error } = await _sb
-                .from('firestore_documents')
-                .delete()
-                .eq('path_key', _pk(appId, coll, docId));
-            if (error) { console.error('[Supabase] delete', error); throw new Error(error.details || error.message || JSON.stringify(error)); }
-        }
-
-        // ── Snapshot wrappers (meniru Firebase DocumentSnapshot / QuerySnapshot) ─
-        function _docSnap(data, docId) {
-            return {
-                id: docId,
-                exists:  () => data !== null && data !== undefined,
-                data:    () => { if (!data) return null; const { id: _i, ...rest } = data; return rest; },
-                get:     (f) => data ? _getNested(data, f) : undefined,
-            };
-        }
-        function _colSnap(docs) {
-            const snapDocs = docs.map(d => {
-                const { id, ...rest } = d;
-                return {
-                    id,
-                    ref:    { id },
-                    exists: () => true,
-                    data:   () => rest,
-                    get:    (f) => _getNested(d, f),
-                };
-            });
-            return {
-                docs:    snapDocs,
-                empty:   snapDocs.length === 0,
-                size:    snapDocs.length,
-                forEach: fn => snapDocs.forEach(fn),
-            };
-        }
-
-        // ── Constraints ──────────────────────────────────────────────────────────
-        function _applyConstraints(docs, constraints) {
-            let result = [...docs];
-            const orders = [];
-            let limitN = null;
-            for (const c of (constraints || [])) {
-                if (!c || !c.__sbType) continue;
-                if (c.__sbType === 'where') {
-                    result = result.filter(d => {
-                        const val = _getNested(d, c.field);
-                        switch (c.op) {
-                            case '==':             return val == c.value;
-                            case '!=':             return val != c.value;
-                            case '>':              return val > c.value;
-                            case '>=':             return val >= c.value;
-                            case '<':              return val < c.value;
-                            case '<=':             return val <= c.value;
-                            case 'in':             return Array.isArray(c.value) && c.value.includes(val);
-                            case 'not-in':         return Array.isArray(c.value) && !c.value.includes(val);
-                            case 'array-contains': return Array.isArray(val) && val.includes(c.value);
-                            default:               return true;
-                        }
-                    });
-                } else if (c.__sbType === 'orderBy') {
-                    orders.push(c);
-                } else if (c.__sbType === 'limit') {
-                    limitN = c.n;
-                }
-            }
-            if (orders.length) {
-                result.sort((a, b) => {
-                    for (const o of orders) {
-                        const aV = _getNested(a, o.field);
-                        const bV = _getNested(b, o.field);
-                        const dir = o.direction === 'desc' ? -1 : 1;
-                        if (aV == null && bV == null) continue;
-                        if (aV == null) return dir;
-                        if (bV == null) return -dir;
-                        const aS = typeof aV === 'object' ? JSON.stringify(aV) : String(aV);
-                        const bS = typeof bV === 'object' ? JSON.stringify(bV) : String(bV);
-                        if (aS < bS) return -dir;
-                        if (aS > bS) return dir;
-                    }
-                    return 0;
-                });
-            }
-            if (limitN != null) result = result.slice(0, limitN);
-            return result;
-        }
-
-        // ══════════════════════════════════════════════════════════════════════════
-        // PUBLIC API — meniru Firebase Firestore
-        // ══════════════════════════════════════════════════════════════════════════
-
-        // ── collection(db, ...segs) ───────────────────────────────────────────────
-        function collection(db, ...segs) {
-            const { appId, coll } = _parse(['', ...segs]);
-            return { __sb: 'col', appId, coll };
-        }
-
-        // ── doc(db|colRef, ...segs) ───────────────────────────────────────────────
-        function doc(dbOrRef, ...segs) {
-            if (dbOrRef && dbOrRef.__sb === 'col') {
-                return { __sb: 'doc', appId: dbOrRef.appId, coll: dbOrRef.coll, docId: segs[0] || _uid() };
-            }
-            const cleanSegs = segs.filter(x => typeof x === 'string');
-            const { appId, coll, docId } = _parse(['', ...cleanSegs]);
-            return { __sb: 'doc', appId, coll, docId: docId || _uid() };
-        }
-
-        // ── serverTimestamp() ─────────────────────────────────────────────────────
-        function serverTimestamp() { return { __sb_ts: true }; }
-
-        // ── increment(n) ──────────────────────────────────────────────────────────
-        function increment(n) { return { __sb_inc: n }; }
-
-        // ── query / where / orderBy / limit ───────────────────────────────────────
-        function query(colRef, ...constraints) {
-            return { __sb: 'query', colRef, constraints };
-        }
-        function where(field, op, value) {
-            return { __sbType: 'where', field, op, value };
-        }
-        function orderBy(field, direction) {
-            return { __sbType: 'orderBy', field, direction: direction || 'asc' };
-        }
-        function limit(n) {
-            return { __sbType: 'limit', n };
-        }
-
-        // ── addDoc(colRef, data) ──────────────────────────────────────────────────
-        async function addDoc(colRef, data) {
-            const docId = _uid();
-            const { appId, coll } = colRef;
-            const processed = _resolve(data, {});
-            await _upsertSdk(appId, coll, docId, processed);
-            return { id: docId };
-        }
-
-        // ── setDoc(docRef, data, opts?) ───────────────────────────────────────────
-        async function setDoc(docRef, data, opts) {
-            const { appId, coll, docId } = docRef;
-            let processed;
-            if (opts && opts.merge) {
-                const existing = await _fetchDoc(appId, coll, docId);
-                processed = _resolve(data, existing || {});
-            } else {
-                processed = _resolve(data, {});
-            }
-            await _upsertSdk(appId, coll, docId, processed);
-        }
-
-        // ── updateDoc(docRef, data) ───────────────────────────────────────────────
-        async function updateDoc(docRef, data) {
-            const { appId, coll, docId } = docRef;
-            const existing = await _fetchDoc(appId, coll, docId);
-            const updated  = _resolve(data, existing || {});
-            await _patchSdk(appId, coll, docId, updated);
-        }
-
-        // ── deleteDoc(docRef) ─────────────────────────────────────────────────────
-        async function deleteDoc(docRef) {
-            const { appId, coll, docId } = docRef;
-            await _deleteSdk(appId, coll, docId);
-        }
-
-        // ── getDoc(docRef) ────────────────────────────────────────────────────────
-        async function getDoc(docRef) {
-            const { appId, coll, docId } = docRef;
-            const data = await _fetchDoc(appId, coll, docId);
-            return _docSnap(data, docId);
-        }
-
-        // ── getDocs(queryRef|colRef) ──────────────────────────────────────────────
-        async function getDocs(ref) {
-            let docs;
-            if (ref.__sb === 'query') {
-                const all = await _fetchCol(ref.colRef.appId, ref.colRef.coll);
-                docs = _applyConstraints(all, ref.constraints);
-            } else {
-                docs = await _fetchCol(ref.appId, ref.coll);
-            }
-            return _colSnap(docs);
-        }
-
-        // ── onSnapshot(ref, callback, errCb?) ─────────────────────────────────────
-        // Menggunakan Supabase Realtime + polling fallback
-        function onSnapshot(refOrQuery, callback, errCb) {
-            let appId, coll, docId, fetchAndNotify;
-
-            if (refOrQuery.__sb === 'doc') {
-                ({ appId, coll, docId } = refOrQuery);
-                fetchAndNotify = async () => {
-                    const data = await _fetchDoc(appId, coll, docId);
-                    callback(_docSnap(data, docId));
-                };
-            } else {
-                const isQuery = refOrQuery.__sb === 'query';
-                const colRef   = isQuery ? refOrQuery.colRef : refOrQuery;
-                const consts   = isQuery ? refOrQuery.constraints : [];
-                appId = colRef.appId;
-                coll  = colRef.coll;
-                fetchAndNotify = async () => {
-                    const all = await _fetchCol(appId, coll);
-                    callback(_colSnap(_applyConstraints(all, consts)));
-                };
-            }
-
-            // Initial load
-            fetchAndNotify().catch(e => { errCb && errCb(e); });
-
-            // Realtime subscription
-            const chanId = 'sb_' + _uid();
-            let channel;
-            const filter = docId
-                ? 'path_key=eq.' + _pk(appId, coll, docId)
-                : 'collection_name=eq.' + coll;
-
-            try {
-                channel = _sb.channel(chanId)
-                    .on('postgres_changes', {
-                        event: '*', schema: 'public',
-                        table: 'firestore_documents',
-                        filter: filter,
-                    }, () => { fetchAndNotify().catch(() => {}); })
-                    .subscribe(status => {
-                        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                            startPoll();
-                        }
-                    });
-            } catch (e) { /* fallback ke polling */ }
-
-            // Polling fallback (setiap 8 detik)
-            let pollTimer = null;
-            const startPoll = () => {
-                if (pollTimer) return;
-                pollTimer = setInterval(() => fetchAndNotify().catch(() => {}), 8000);
-            };
-            startPoll(); // aktifkan polling sebagai backup
-
-            return () => {
-                if (channel) _sb.removeChannel(channel);
-                if (pollTimer) clearInterval(pollTimer);
-            };
-        }
-
-        // ── writeBatch(db) ────────────────────────────────────────────────────────
-        function writeBatch(db) {
-            const ops = [];
-            return {
-                set:    (ref, data, opts) => ops.push({ type: 'set',    ref, data, opts }),
-                update: (ref, data)       => ops.push({ type: 'update', ref, data }),
-                delete: (ref)             => ops.push({ type: 'delete', ref }),
-                commit: async () => {
-                    for (const op of ops) {
-                        if      (op.type === 'set')    await setDoc(op.ref, op.data, op.opts || {});
-                        else if (op.type === 'update') await updateDoc(op.ref, op.data);
-                        else if (op.type === 'delete') await deleteDoc(op.ref);
-                    }
-                },
-            };
-        }
-
-        // ── Auth emulasi (Firebase Auth tidak dipakai lagi) ────────────────────────
-        // App memakai sistem auth sendiri via Firestore; kita cukup emulasikan user anonim.
-        const _mockUid  = _uid();
-        const _mockUser = { uid: _mockUid, isAnonymous: true, email: null };
-        const _authCbs  = [];
-        let   _curUser  = null;
-        const auth = { currentUser: null };
-
-        function signInAnonymously(authRef) {
-            return new Promise(resolve => setTimeout(() => {
-                _curUser = _mockUser;
-                auth.currentUser = _mockUser;
-                _authCbs.forEach(cb => { try { cb(_mockUser); } catch(e) {} });
-                resolve({ user: _mockUser });
-            }, 30));
-        }
-        function signInWithCustomToken(authRef, token) {
-            return signInAnonymously(authRef);
-        }
-        function onAuthStateChanged(authRef, cb) {
-            _authCbs.push(cb);
-            if (_curUser) setTimeout(() => cb(_curUser), 0);
-            return () => {
-                const i = _authCbs.indexOf(cb);
-                if (i >= 0) _authCbs.splice(i, 1);
-            };
-        }
-
-        // ── Expose semua ke window (menggantikan Firebase) ────────────────────────
-        const _db = { __sb: 'db', __url: SUPABASE_URL };
-        window.db                 = _db;
-        window.auth               = auth;
-        window.signInAnonymously  = signInAnonymously;
-        window.signInWithCustomToken = signInWithCustomToken;
-        window.onAuthStateChanged = onAuthStateChanged;
-        window.collection         = collection;
-        window.addDoc             = addDoc;
-        window.updateDoc          = updateDoc;
-        window.deleteDoc          = deleteDoc;
-        window.setDoc             = setDoc;
-        window.getDoc             = getDoc;
-        window.getDocs            = getDocs;
-        window.doc                = doc;
-        window.onSnapshot         = onSnapshot;
-        window.serverTimestamp    = serverTimestamp;
-        window.writeBatch         = writeBatch;
-        window.query              = query;
-        window.orderBy            = orderBy;
-        window.where              = where;
-        window.increment          = increment;
-        window.limit              = limit;
-        window.appId              = (typeof __app_id !== 'undefined') ? __app_id : 'default-app-id';
-        window.initialAuthToken   = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
-
-        window._sbKey = SUPABASE_KEY; // dipakai oleh keepalive fetch saat pagehide
-        console.log('✅ Supabase Adapter aktif →', SUPABASE_URL);
-    })();
-    </script>
-
 
     <!-- React App (Babel) -->
     <script type="text/babel">
@@ -1443,7 +1254,7 @@
                 // if (settings.storeHeader3 && (!headers.length)) { encoder.text(settings.storeHeader3).newline(); }
                 headers.forEach(h => { if(h && h.trim()) encoder.text(h).newline(); });
                 
-                const receiptDate = receipt.date ? (receipt.date.seconds ? receipt.date.toDate() : new Date(receipt.date)) : new Date(0);
+                const receiptDate = receipt.date.seconds ? receipt.date.toDate() : new Date(receipt.date);
                 const hariIndo = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][receiptDate.getDay()];
                 encoder.line().alignLeft()
                     .text(`Tgl: ${hariIndo}, ${receiptDate.toLocaleDateString('id-ID')} ${receiptDate.toLocaleTimeString('id-ID')}`)
@@ -2106,7 +1917,7 @@
                 const usersRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
                 const unsub = window.onSnapshot(usersRef, (snap) => {
                     const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    data.sort((a, b) => (a.namaLengkap || '').localeCompare(b.namaLengkap || ''));
+                    data.sort((a, b) => a.namaLengkap?.localeCompare(b.namaLengkap));
                     setUsers(data);
                     setLoadingUsers(false);
                 });
@@ -4524,7 +4335,7 @@
                 if (qty <= 0 || price <= 0) { showToast("Qty dan harga harus lebih dari 0!", "error"); return; }
 
                 // Cek nama barang sudah ada di daftar barang
-                const existingItem = items.find(i => (i.name || '').toLowerCase() === newItemData.name.trim().toLowerCase());
+                const existingItem = items.find(i => i.name.toLowerCase() === newItemData.name.trim().toLowerCase());
                 if (existingItem) {
                     // Barang sudah ada → pakai seperti biasa
                     setSelectedItem(existingItem);
@@ -4593,7 +4404,7 @@
             
             // Filter items untuk search
             const filteredItems = items.filter(item => 
-                (item.name || '').toLowerCase().includes(itemSearch.toLowerCase())
+                item.name.toLowerCase().includes(itemSearch.toLowerCase())
             ).slice(0, 10);
 
             // Filter purchases by store
@@ -4651,7 +4462,7 @@
                         if (item.discountBeli2 > 0) effPrice = item.discountBeliType2 === 'Rp' ? Math.max(0, effPrice - item.discountBeli2) : effPrice * (1 - item.discountBeli2 / 100);
                         if (item.discountBeli3 > 0) effPrice = item.discountBeliType3 === 'Rp' ? Math.max(0, effPrice - item.discountBeli3) : effPrice * (1 - item.discountBeli3 / 100);
                         if (effPrice <= 0) return;
-                        const normName = (item.name || '').trim();
+                        const normName = item.name.trim();
                         if (!itemMap[normName]) itemMap[normName] = {};
                         const existing = itemMap[normName][p.supplier];
                         const thisDate = p.date ? new Date(p.date) : new Date(0);
@@ -4676,7 +4487,7 @@
                             isCheapest: row.price === cheapestPrice
                         }))
                     };
-                }).sort((a, b) => (a.itemName || '').localeCompare(b.itemName || '', 'id'));
+                }).sort((a, b) => a.itemName.localeCompare(b.itemName, 'id'));
                 return result;
             }, [storePurchases]);
 
@@ -4939,7 +4750,7 @@
                             const meta = item._newItemMeta || {};
                             const collRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory');
                             // Cek sekali lagi apakah nama sudah ada (race condition)
-                            const existingByName = items.find(i => (i.name || '').toLowerCase() === (item.name || '').toLowerCase());
+                            const existingByName = items.find(i => i.name.toLowerCase() === item.name.toLowerCase());
                             if (existingByName) {
                                 // Sudah ada → pakai id yang sudah ada
                                 return { ...item, id: existingByName.id, _pendingNew: false, _newItemMeta: undefined };
@@ -5325,7 +5136,7 @@
                 setDetailModalOpen(false);
                 setInvoiceModalOpen(true);
             };
-            const filteredSuppliers = suppliers.filter(s => (s.name || '').toLowerCase().includes(supplierSearch.toLowerCase()));
+            const filteredSuppliers = suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()));
             const uniqueSupplierNames = [...new Set(storePurchases.map(p => p.supplier).filter(Boolean))].sort();
             const filteredPurchases = storePurchases.filter(p => {
                 const q = purchaseSearch.toLowerCase();
@@ -7290,7 +7101,7 @@
                         .map(d => ({ id: d.id, ...d.data() }))
                         .map(u => ({ name: u.namaLengkap || u.username, isActive: u.isActive !== false }))
                         .filter(u => u.name)
-                        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                        .sort((a, b) => a.name.localeCompare(b.name));
                     setRegisteredUsers(users);
                 });
                 return () => unsub();
@@ -7389,7 +7200,7 @@
                     await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'dokter_list', editId), { name: name.trim(), alamat: alamat.trim(), hp: hp.trim() });
                     showToast('Data dokter diperbarui');
                 } else {
-                    const exists = dokterList.find(d => (d.name || '').toLowerCase() === name.trim().toLowerCase());
+                    const exists = dokterList.find(d => d.name.toLowerCase() === name.trim().toLowerCase());
                     if (!exists) {
                         await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'dokter_list'), { name: name.trim(), alamat: alamat.trim(), hp: hp.trim(), createdAt: window.serverTimestamp() });
                     }
@@ -7411,7 +7222,7 @@
                     await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'pasien_list', editId), { name: name.trim(), age: age || '', alamat: alamat.trim(), hp: hp.trim() });
                     showToast('Data pasien diperbarui');
                 } else {
-                    const exists = pasienList.find(p => (p.name || '').toLowerCase() === name.trim().toLowerCase());
+                    const exists = pasienList.find(p => p.name.toLowerCase() === name.trim().toLowerCase());
                     if (!exists) {
                         await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pasien_list'), { name: name.trim(), age: age || '', alamat: alamat.trim(), hp: hp.trim(), createdAt: window.serverTimestamp() });
                     }
@@ -7757,29 +7568,13 @@
                     const snap = autoSaveSnap.current;
                     if (snap?.isSessionActive && snap?.activeCartId) {
                         try {
-                            // Supabase: mark active_cart sebagai tidak aktif saat halaman ditutup
+                            const projectId = window.db?.app?.options?.projectId;
                             const cartId = snap.activeCartId;
-                            const appId  = window.appId || 'default-app-id';
-                            const pk     = appId + '::active_carts::' + cartId;
-                            // Gunakan keepalive fetch (lebih andal dari sendBeacon untuk REST API)
-                            fetch(
-                                window._supabaseClient?.supabaseUrl
-                                    ? window._supabaseClient.supabaseUrl + '/rest/v1/firestore_documents?path_key=eq.' + encodeURIComponent(pk)
-                                    : 'https://mnuunkrkoeqjzbxceodc.supabase.co/rest/v1/firestore_documents?path_key=eq.' + encodeURIComponent(pk),
-                                {
-                                    method: 'PATCH',
-                                    headers: {
-                                        'Content-Type':  'application/json',
-                                        'apikey':        window._sbKey || '',
-                                        'Prefer':        'return=minimal',
-                                    },
-                                    // Catatan: PATCH ini update seluruh kolom data.
-                                    // isActive=false akan ter-set saat onSnapshot berikutnya re-fetch.
-                                    // Untuk skenario keepalive, kita tandai via field khusus.
-                                    body: JSON.stringify({ data: { __inactive: true } }),
-                                    keepalive: true,
-                                }
-                            ).catch(() => {});
+                            if (projectId && cartId) {
+                                const url = 'https://firestore.googleapis.com/v1/projects/' + projectId + '/databases/(default)/documents/artifacts/' + window.appId + '/public/data/active_carts/' + cartId + '?updateMask.fieldPaths=isActive';
+                                const body = JSON.stringify({ fields: { isActive: { booleanValue: false } } });
+                                navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
+                            }
                         } catch(e) { /* silent - best effort */ }
                     }
                     doAutoMoveToTertunda();
@@ -8782,7 +8577,7 @@
                                                     if (!name) return;
                                                     setSavingPembeli(true);
                                                     try {
-                                                        const exists = pasienList.find(p => (p.name || '').toLowerCase() === name.toLowerCase());
+                                                        const exists = pasienList.find(p => p.name.toLowerCase() === name.toLowerCase());
                                                         if (!exists) {
                                                             await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pasien_list'), { name, age: '', alamat: '', hp: '', createdAt: window.serverTimestamp() });
                                                         }
@@ -8818,7 +8613,7 @@
                                                     <p className="text-center text-xs text-slate-400 py-4">Tidak ada pembeli ditemukan.<br/>Klik <b>+ Pembeli</b> untuk tambah baru.</p>
                                                 )}
                                             </div>
-                                            {pembeliInput.trim() && !pasienList.find(p => (p.name || '').toLowerCase() === pembeliInput.trim().toLowerCase()) && (
+                                            {pembeliInput.trim() && !pasienList.find(p => p.name.toLowerCase() === pembeliInput.trim().toLowerCase()) && (
                                                 <button onClick={() => { setSelectedPembeli(pembeliInput.trim()); setShowPembeliModal(false); }}
                                                     className="w-full mt-3 py-2.5 rounded-xl border-2 border-dashed border-teal-300 text-teal-600 text-xs font-bold hover:bg-teal-50 transition-all active:scale-95">
                                                     Pilih "{pembeliInput.trim()}" (tanpa simpan)
@@ -8964,7 +8759,7 @@
                                                 <p className="text-[10px] font-bold text-slate-500 uppercase mb-1.5">Pilih Barang</p>
                                                 <input value={paketItemSearch} onChange={e => setPaketItemSearch(e.target.value)} placeholder="Cari barang..." className="w-full text-xs border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:border-teal-400 mb-2" />
                                                 <div className="max-h-36 overflow-y-auto divide-y divide-slate-100 border border-slate-100 rounded-lg mb-3">
-                                                    {items.filter(it => !paketItemSearch || (it.name || '').toLowerCase().includes(paketItemSearch.toLowerCase())).slice(0, 20).map(it => {
+                                                    {items.filter(it => !paketItemSearch || it.name.toLowerCase().includes(paketItemSearch.toLowerCase())).slice(0, 20).map(it => {
                                                         const inPaket = paketForm.items.find(pi => pi.itemId === it.id);
                                                         return (
                                                             <div key={it.id} className="flex items-center justify-between px-2 py-1.5 hover:bg-slate-50">
@@ -9508,7 +9303,7 @@
                                             <span className="text-xs text-slate-400">{dokterList.length} data</span>
                                         </div>
                                         {(() => {
-                                            const filtered = dokterSearch ? dokterList.filter(d => (d.name || '').toLowerCase().includes(dokterSearch.toLowerCase())) : dokterList;
+                                            const filtered = dokterSearch ? dokterList.filter(d => d.name.toLowerCase().includes(dokterSearch.toLowerCase())) : dokterList;
                                             if (filtered.length === 0) return (
                                                 <div className="border border-slate-200 rounded-2xl p-10 flex flex-col items-center gap-3 mt-2">
                                                     <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
@@ -9650,7 +9445,7 @@
                                             <span className="text-xs text-slate-400">{pasienList.length} data</span>
                                         </div>
                                         {(() => {
-                                            const filtered = pasienSearch ? pasienList.filter(p => (p.name || '').toLowerCase().includes(pasienSearch.toLowerCase())) : pasienList;
+                                            const filtered = pasienSearch ? pasienList.filter(p => p.name.toLowerCase().includes(pasienSearch.toLowerCase())) : pasienList;
                                             if (filtered.length === 0) return (
                                                 <div className="border border-slate-200 rounded-2xl p-10 flex flex-col items-center gap-3 mt-2">
                                                     <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
@@ -10128,7 +9923,7 @@
                         .map(d => ({ id: d.id, ...d.data() }))
                         .map(u => ({ name: u.namaLengkap || u.username, isActive: u.isActive !== false }))
                         .filter(u => u.name)
-                        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                        .sort((a, b) => a.name.localeCompare(b.name));
                     setRegisteredUsers(users);
                 });
                 return () => unsub();
@@ -10226,7 +10021,7 @@
             const dailyTransactions = useMemo(() => {
                 const { from, to } = getDateRanges();
                 return transactions.filter(tx => {
-                    const txDate = tx.date ? (tx.date.seconds ? tx.date.toDate() : new Date(tx.date)) : new Date(0);
+                    const txDate = tx.date.seconds ? tx.date.toDate() : new Date(tx.date);
                     if (filterMode === 'today') return isSameDay(txDate, from);
                     if (filterMode === 'specific') {
                         const fromDay = new Date(from); fromDay.setHours(0,0,0,0);
@@ -10249,7 +10044,7 @@
                     const lowerQ = historySearch.toLowerCase();
                     data = data.filter(tx => {
                         if (tx.items && tx.items.some(i => {
-                            if ((i.name || '').toLowerCase().includes(lowerQ)) return true;
+                            if (i.name.toLowerCase().includes(lowerQ)) return true;
                             if (i.racikanInfo) {
                                 if (i.racikanInfo.dokter && i.racikanInfo.dokter.toLowerCase().includes(lowerQ)) return true;
                                 if (i.racikanInfo.pasien && i.racikanInfo.pasien.toLowerCase().includes(lowerQ)) return true;
@@ -10264,8 +10059,8 @@
                 if (filterPayment.length > 0) { data = data.filter(tx => filterPayment.includes(tx.paymentMethod || 'tunai')); }
                 if (filterTipe !== 'all') { data = data.filter(tx => (tx.tipeTransaksi || 'Harga normal') === filterTipe); }
                 data.sort((a, b) => {
-                    const dateA = a.date ? (a.date.seconds ? a.date.toDate() : new Date(a.date)) : new Date(0);
-                    const dateB = b.date ? (b.date.seconds ? b.date.toDate() : new Date(b.date)) : new Date(0);
+                    const dateA = a.date.seconds ? a.date.toDate() : new Date(a.date);
+                    const dateB = b.date.seconds ? b.date.toDate() : new Date(b.date);
                     switch (sortOrder) { case 'oldest': return dateA - dateB; case 'highest': return b.total - a.total; case 'lowest': return a.total - b.total; case 'newest': default: return dateB - dateA; }
                 });
                 return data;
@@ -10280,11 +10075,11 @@
             const stats = useMemo(() => {
                 let grossSales = 0, grossCount = 0, returnsValue = 0, returnTxCount = 0, totalUangR = 0, totalPembulatan = 0;
                 processedTransactions.forEach(tx => {
-                    grossSales += (tx.items || []).reduce((sum, item) => sum + ((item.price || 0) * (item.cartQty || 0)), 0); grossCount++;
+                    grossSales += tx.items.reduce((sum, item) => sum + (item.price * item.cartQty), 0); grossCount++;
                     let txReturnVal = 0, hasReturn = false;
-                    (tx.items || []).forEach(item => { if (item.returnedQty && item.returnedQty > 0) { txReturnVal += (item.returnedQty * (item.price||0)); hasReturn = true; } else if (tx.status === 'returned') { txReturnVal += ((item.cartQty||0) * (item.price||0)); hasReturn = true; } });
+                    tx.items.forEach(item => { if (item.returnedQty && item.returnedQty > 0) { txReturnVal += (item.returnedQty * item.price); hasReturn = true; } else if (tx.status === 'returned') { txReturnVal += (item.cartQty * item.price); hasReturn = true; } });
                     returnsValue += txReturnVal; if (hasReturn) returnTxCount++;
-                    (tx.items || []).forEach(item => { if (item.isRacikanGroup && item.racikanInfo?.uangR) totalUangR += (parseInt(item.racikanInfo.uangR) || 0); });
+                    tx.items.forEach(item => { if (item.isRacikanGroup && item.racikanInfo?.uangR) totalUangR += (parseInt(item.racikanInfo.uangR) || 0); });
                     if (tx.pembulatan) totalPembulatan += (tx.pembulatan || 0);
                 });
                 return { netSales: grossSales - returnsValue, grossSales, grossCount, returnsValue, returnTxCount, avgSale: grossCount > 0 ? grossSales / grossCount : 0, totalUangR, totalPembulatan };
@@ -10295,8 +10090,8 @@
             // Buka sub-page retur (flow baru: step1 → step2)
             const openReturPage = (tx) => {
                 if (!canReturOldTransaction(tx)) { showToast('Hanya Owner atau akun yang diizinkan yang bisa retur transaksi kemarin & sebelumnya', 'error'); return; }
-                const rItems = (tx.items || [])
-                    .map((item, origIdx) => ({ ...item, origIdx, maxRetur: (item.cartQty||0) - (item.returnedQty || 0) }))
+                const rItems = tx.items
+                    .map((item, origIdx) => ({ ...item, origIdx, maxRetur: item.cartQty - (item.returnedQty || 0) }))
                     .filter(item => item.maxRetur > 0)
                     .map(item => ({ ...item, checked: false, returQty: item.maxRetur }));
                 if (rItems.length === 0) { showToast('Semua item sudah diretur', 'error'); return; }
@@ -10328,9 +10123,9 @@
                     const batch = window.writeBatch(window.db);
                     const storeIdToReturn = selectedTx.storeId || 'default';
                     const stockField = `stocks.${storeIdToReturn}`;
-                    const updatedItems = [...(selectedTx.items || [])];
+                    const updatedItems = [...selectedTx.items];
                     for (const ri of selItems) {
-                        const origIdx = ri.origIdx !== undefined ? ri.origIdx : (selectedTx.items || []).findIndex(i => i.id === ri.id);
+                        const origIdx = ri.origIdx !== undefined ? ri.origIdx : selectedTx.items.findIndex(i => i.id === ri.id);
                         if (origIdx === -1) continue;
                         if (ri.isRacikanGroup) {
                             (ri.racikanItems || []).forEach(b => {
@@ -10376,7 +10171,7 @@
             // Cek apakah transaksi berasal dari hari sebelum hari ini
             const isTxOlderThanToday = (tx) => {
                 if (!tx?.date) return false;
-                const txDate = tx.date ? (tx.date?.toDate ? tx.date.toDate() : new Date(tx.date)) : new Date(0);
+                const txDate = tx.date?.toDate ? tx.date.toDate() : new Date(tx.date);
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 return txDate < today;
@@ -10414,7 +10209,7 @@
                     }
                     
                     const txRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions', tx.id);
-                    const updatedItems = [...(tx.items || [])];
+                    const updatedItems = [...tx.items];
                     updatedItems[index].returnedQty = (updatedItems[index].returnedQty || 0) + qtyToRetur;
                     let totalItemsCount = 0, totalReturnedCount = 0;
                     updatedItems.forEach(i => { totalItemsCount += i.cartQty; totalReturnedCount += (i.returnedQty || 0); });
@@ -10485,7 +10280,7 @@
                     // Agregasi item terjual dari transaksi yang sudah difilter
                     const itemMap = {};
                     processedTransactions.forEach(tx => {
-                        (tx.items || []).forEach(item => {
+                        tx.items.forEach(item => {
                             const netQty = (item.cartQty || 0) - (item.returnedQty || 0);
                             if (netQty <= 0) return;
                             const key = item.id || item.name;
@@ -10501,7 +10296,7 @@
                     const buyPriceMap = {};
                     purchasesData.forEach(p => {
                         if (p.items) {
-                            (p.items || []).forEach(pi => {
+                            p.items.forEach(pi => {
                                 const key = pi.id || pi.name;
                                 if (pi.buyPrice > 0 && !buyPriceMap[key]) {
                                     buyPriceMap[key] = pi.buyPrice;
@@ -10942,7 +10737,7 @@
                                 <div className="flex items-start gap-2">
                                     <span className="text-xs font-bold text-slate-400 mt-0.5">{(histPage - 1) * HIST_PAGE_SIZE + idx + 1}</span>
                                     <div>
-                                        <p className="text-xs font-bold text-teal-600">{(() => { const d = tx.date ? new Date(tx.date.seconds ? tx.date.toDate() : tx.date) : new Date(0); return d.toLocaleDateString('en-GB', {year:'numeric', month:'short', day:'numeric'}) + ', ' + d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) + ' WIB'; })()}</p>
+                                        <p className="text-xs font-bold text-teal-600">{(() => { const d = new Date(tx.date.seconds ? tx.date.toDate() : tx.date); return d.toLocaleDateString('en-GB', {year:'numeric', month:'short', day:'numeric'}) + ', ' + d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) + ' WIB'; })()}</p>
                                         <p className={`text-sm font-black ${tx.status === 'returned' ? 'text-red-500 line-through' : 'text-teal-600'}`}>#{tx.id?.slice(-10).toUpperCase()}</p>
                                     </div>
                                 </div>
@@ -10956,7 +10751,7 @@
                             {/* Barang */}
                             <div className="mt-2 mb-3">
                                 <p className="text-xs font-black text-slate-800 mb-0.5">Barang</p>
-                                <p className="text-xs text-slate-600 leading-snug">{(tx.items || []).map(i => String(i.name || '')).join(', ')}</p>
+                                <p className="text-xs text-slate-600 leading-snug">{tx.items.map(i => i.name).join(', ')}</p>
                             </div>
                             {/* Grid 2 kolom: Kasir | Sales */}
                             <div className="grid grid-cols-2 gap-x-4 mb-2">
@@ -11214,7 +11009,7 @@
                                     <span className="w-20 text-right">Harga</span>
                                 </div>
                                 {(() => {
-                                    return (selectedTx.items || []).map((item, idx) => {
+                                    return selectedTx.items.map((item, idx) => {
                                         const returnedQty = item.returnedQty || 0;
                                         const isFullyReturned = returnedQty >= item.cartQty;
                                         const ri = item.racikanInfo;
@@ -11245,19 +11040,19 @@
                                     });
                                 })()}
                                 {(() => {
-                                    const subtotalTx = (selectedTx.items || []).reduce((acc, item) => acc + (((item.originalPrice || item.price) || 0) * (item.cartQty || 0)), 0);
-                                    const diskonTxRp = subtotalTx - (selectedTx.total || 0);
-                                    const discountedItems = (selectedTx.items || []).filter(i => i.discount && i.discount.value > 0);
-                                    const uniqTypes = [...new Set(discountedItems.map(i => i.discount?.type).filter(Boolean))];
-                                    const uniqValues = [...new Set(discountedItems.map(i => i.discount?.value).filter(v => v !== undefined))];
+                                    const subtotalTx = selectedTx.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * item.cartQty), 0);
+                                    const diskonTxRp = subtotalTx - selectedTx.total;
+                                    const discountedItems = selectedTx.items.filter(i => i.discount && i.discount.value > 0);
+                                    const uniqTypes = [...new Set(discountedItems.map(i => i.discount.type))];
+                                    const uniqValues = [...new Set(discountedItems.map(i => i.discount.value))];
                                     let diskonLabel = 'Diskon';
                                     if (discountedItems.length > 0 && uniqTypes.length === 1) {
                                         if (uniqTypes[0] === '%') { diskonLabel = uniqValues.length === 1 ? ('Diskon ' + uniqValues[0] + '%') : 'Diskon (%)'; }
                                         else { diskonLabel = uniqValues.length === 1 ? ('Diskon ' + formatRupiah(uniqValues[0])) : 'Diskon (Rp)'; }
                                     }
                                     // Hitung nilai retur dan total setelah retur
-                                    const totalReturnedValue = (selectedTx.items || []).reduce((acc, item) => acc + ((item.price || 0) * (item.returnedQty || 0)), 0);
-                                    const totalSetelahRetur = (selectedTx.total || 0) - totalReturnedValue;
+                                    const totalReturnedValue = selectedTx.items.reduce((acc, item) => acc + (item.price * (item.returnedQty || 0)), 0);
+                                    const totalSetelahRetur = selectedTx.total - totalReturnedValue;
                                     const hasRetur = totalReturnedValue > 0;
                                     return (
                                         <div className="mt-1 pt-1">
@@ -13310,7 +13105,7 @@
             const debouncedSetSearchQuery = useMemo(() => { let timer; return (val) => { clearTimeout(timer); timer = setTimeout(() => setSearchQuery(val), 300); }; }, []);
             const toggleRack = (rackName) => { setSelectedRacks(prev => { if (prev.includes(rackName)) return prev.filter(r => r !== rackName); return [...prev, rackName]; }); };
             const getRackLabel = () => { if (selectedRacks.length === 0) return "Semua Rak"; if (selectedRacks.length === 1) return selectedRacks[0]; return `${selectedRacks.length} Rak Terpilih`; };
-            const filteredRacks = uniqueRacksData.filter(r => (r.name || '').toLowerCase().includes(rackSearch.toLowerCase()));
+            const filteredRacks = uniqueRacksData.filter(r => r.name.toLowerCase().includes(rackSearch.toLowerCase()));
             const displayedItems = filteredItems.slice(0, displayedLimit);
 
             if (selectedDetailItem) {
@@ -17151,7 +16946,7 @@
                 if (activeFilterSupplier.length > 0) data = data.filter(b => activeFilterSupplier.includes(b.supplier));
                 if (sortBy === 'ed_asc') data.sort((a,b) => (a.daysLeft??99999) - (b.daysLeft??99999));
                 else if (sortBy === 'ed_desc') data.sort((a,b) => (b.daysLeft??99999) - (a.daysLeft??99999));
-                else data.sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+                else data.sort((a,b) => a.name.localeCompare(b.name));
                 return data;
             }, [allBatches, searchQuery, filterStatus, detailFilter, sortBy, activeFilterED, activeFilterSupplier]);
 
@@ -17605,7 +17400,7 @@
             // Filter pencarian
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase();
-                filteredItems = filteredItems.filter(i => (i.name || '').toLowerCase().includes(q));
+                filteredItems = filteredItems.filter(i => i.name.toLowerCase().includes(q));
             }
 
             // Filter prioritas
@@ -17628,8 +17423,8 @@
 
             // Sort
             filteredItems.sort((a, b) => {
-                if (sortBy === 'name_asc') return (a.name || '').localeCompare(b.name || '', 'id');
-                if (sortBy === 'name_desc') return (b.name || '').localeCompare(a.name || '', 'id');
+                if (sortBy === 'name_asc') return a.name.localeCompare(b.name, 'id');
+                if (sortBy === 'name_desc') return b.name.localeCompare(a.name, 'id');
                 if (sortBy === 'qty_asc') return (Number(a.qty)||0) - (Number(b.qty)||0);
                 if (sortBy === 'qty_desc') return (Number(b.qty)||0) - (Number(a.qty)||0);
                 if (sortBy === 'exp_asc') {
@@ -18109,7 +17904,7 @@
                     return item.name?.toLowerCase().includes(search.toLowerCase());
                 })
                 .map(item => ({ ...item, _storeQty: getStoreStock(item, fromStore) }))
-                .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                .sort((a, b) => a.name.localeCompare(b.name));
 
             const handleAddToCart = (item) => {
                 if (cartIds.has(item.id)) return;
@@ -19224,7 +19019,7 @@
 
                     const filteredProducts = React.useMemo(() => {
                         if (!searchQuery) return plData.products;
-                        return plData.products.filter(p => (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()));
+                        return plData.products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
                     }, [plData.products, searchQuery]);
 
                     const pmMeta = { tunai: { label: 'Tunai', color: '#0ea5e9', icon: 'money-bill' }, qris: { label: 'QRIS', color: '#8b5cf6', icon: 'qrcode' }, transfer: { label: 'Transfer', color: '#f59e0b', icon: 'building-columns' }, kartu: { label: 'Kartu', color: '#ec4899', icon: 'credit-card' } };
@@ -19519,7 +19314,7 @@
                             });
                         });
                         let arr = Object.values(map);
-                        if (searchQuery) arr = arr.filter(r => (r.name || '').toLowerCase().includes(searchQuery.toLowerCase()));
+                        if (searchQuery) arr = arr.filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()));
                         arr.sort((a, b) => sortBy === 'qty' ? b.totalQty - a.totalQty : b.totalRevenue - a.totalRevenue);
                         return arr;
                     }, [filteredTx, searchQuery, sortBy]);
@@ -19665,7 +19460,7 @@
             });
             const [liveChangelog, setLiveChangelog] = useState(CHANGELOG);
 
-            // Supabase real-time listener untuk changelog notifikasi (dari admin panel)
+            // Firestore real-time listener untuk changelog notifikasi (dari admin panel)
             React.useEffect(() => {
                 if (!window.db) return;
                 const COLL = ['artifacts', window.appId || 'default-app-id', 'public', 'data', 'changelog'];
@@ -19674,8 +19469,8 @@
                 let unsub;
                 let _synced = false; // hanya sync sekali per session
 
-                // ── Auto-upsert: push entri CHANGELOG baru ke Supabase ──
-                // Jika versi di CHANGELOG (hardcode) belum ada di Supabase, tambahkan otomatis.
+                // ── Auto-upsert: push entri CHANGELOG baru ke Firebase ──
+                // Jika versi di CHANGELOG (hardcode) belum ada di Firebase, tambahkan otomatis.
                 // Admin panel akan langsung menerima update tanpa perlu ubah HTML admin.
                 async function autoSyncChangelogToFirebase(firestoreDocs) {
                     if (_synced) return;
@@ -19703,7 +19498,7 @@
                             }, { merge: false });
                         });
                         await batch.commit();
-                        console.log(`✅ ${newEntries.length} entri changelog baru di-sync ke Supabase`);
+                        console.log(`✅ ${newEntries.length} entri changelog baru di-sync ke Firebase`);
                     } catch(e) {
                         console.warn('Auto-sync changelog gagal:', e);
                     }
@@ -19953,10 +19748,7 @@
                 if (!user) return;
                 const q = window.query(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory'));
                 const unsubscribeSnapshot = window.onSnapshot(q, (snapshot) => {
-                    // Filter item yang sama sekali tidak punya field 'name' (data rusak)
-                    const data = snapshot.docs
-                        .map(doc => ({ id: doc.id, ...doc.data() }))
-                        .filter(item => item !== null && item !== undefined);
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     setRawInventory(data); // Save raw data
                     setLoading(false);
                 }, (error) => { console.error("Firestore Error:", error); showToast("Gagal memuat data live", "error"); });
@@ -19991,19 +19783,9 @@
 
                     return {
                         ...item,
-                        // Pastikan semua field string tidak undefined (cegah crash di seluruh view)
-                        name:      item.name      || '',
-                        unit:      item.unit      || 'Pcs',
-                        rack:      item.rack      || '-',
-                        exp:       item.exp       || '',
-                        batchNo:   item.batchNo   || '',
-                        // Pastikan field angka tidak undefined
-                        price:     item.price     || 0,
-                        costPrice: item.costPrice || 0,
-                        minStock:  item.minStock  || 0,
-                        qty:       displayQty,
-                        _originalQty: item.qty,
-                        _breakdown:   breakdown,
+                        qty: displayQty, // Override qty for display/logic
+                        _originalQty: item.qty, // Keep ref just in case
+                        _breakdown: breakdown // Simpan data rincian toko
                     };
                 });
                 processed.sort((a, b) => a.name.localeCompare(b.name));
@@ -20057,7 +19839,7 @@
                         racks.forEach(r => { if (!r) return; if (!rackMap.has(r)) rackMap.set(r, { name: r, hasNew: false }); if (isItemNew) rackMap.get(r).hasNew = true; });
                     }
                 });
-                return Array.from(rackMap.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                return Array.from(rackMap.values()).sort((a, b) => a.name.localeCompare(b.name));
             }, [inventoryData]);
 
             const getCurrentProfile = () => { 
@@ -20136,7 +19918,7 @@
                         }
                         showToast(`Stok untuk ${currentProfile.name} diperbarui`);
                     } else {
-                        const existingItem = rawInventory.find(i => (i.name || '').toLowerCase() === formData.name.toLowerCase());
+                        const existingItem = rawInventory.find(i => i.name.toLowerCase() === formData.name.toLowerCase());
                         if (existingItem) {
                              const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', existingItem.id);
                              await window.updateDoc(docRef, { ...baseData, ...stockUpdate });
@@ -20191,7 +19973,7 @@
                             purchasesSnap.docs.forEach(pDoc => {
                                 const pData = pDoc.data();
                                 if (!pData.items) return;
-                                const itemIndex = pData.items.findIndex(it => it.id === savedItemId || (it.name || '').toLowerCase() === formData.name.toLowerCase());
+                                const itemIndex = pData.items.findIndex(it => it.id === savedItemId || it.name.toLowerCase() === formData.name.toLowerCase());
                                 if (itemIndex !== -1 && pData.items[itemIndex].buyPrice !== newCostPrice) {
                                     const updatedItems = [...pData.items];
                                     updatedItems[itemIndex] = { ...updatedItems[itemIndex], buyPrice: newCostPrice };
@@ -20206,7 +19988,7 @@
                     }
 
                     setEditingItem(null); setFormData({ name: '', qty: '', unit: 'Pcs', exp: '', rack: '', price: '', costPrice: '', minStock: '', defaultDiscount: '', defaultDiscountType: '%', packagePrices: [] }); setActiveTab('list');
-                } catch (error) { console.error("Error saving:", error); showToast("Gagal menyimpan: " + (error?.message || String(error)), "error"); } finally { setSubmitting(false); }
+                } catch (error) { console.error("Error saving:", error); showToast("Gagal menyimpan ke database", "error"); } finally { setSubmitting(false); }
             };
 
             const handleSaveSettings = async (newSettings) => { if(!user) return; setSubmitting(true); try { const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'settings', 'global'); await window.setDoc(docRef, newSettings); showToast("Pengaturan disimpan"); } catch(error) { console.error(error); showToast("Gagal simpan pengaturan", "error"); } finally { setSubmitting(false); } };
@@ -20223,18 +20005,7 @@
             if (!authSession) {
                 return <AuthScreen onAuthSuccess={(sessionData) => { setAuthSession(sessionData); }} />;
             }
-
-            // Tunggu user (Firebase anonymous auth) siap — hindari blank putih saat ganti akun
-            if (!user) {
-                return (
-                    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:"#f8fafc", fontFamily:"sans-serif" }}>
-                        <div style={{ width:"40px", height:"40px", border:"4px solid #e2e8f0", borderTopColor:"#0ea5e9", borderRadius:"50%", animation:"spin 0.8s linear infinite", marginBottom:"16px" }} />
-                        <p style={{ color:"#64748b", fontSize:"14px" }}>Menghubungkan ke server...</p>
-                        <style>{"@keyframes spin { to { transform: rotate(360deg) } }"}</style>
-                    </div>
-                );
-            }
-
+            
             const isOwner = isOwnerEmail(authSession?.email);
 
             // Daftar toko yang boleh diakses user (owner selalu bisa akses semua)
@@ -20309,7 +20080,7 @@
                             </div> 
                             <div className="border-b-2 border-dashed border-gray-300 my-2"></div>
                             {(() => {
-                                const rd = receiptToPrint.date ? (receiptToPrint.date.seconds ? receiptToPrint.date.toDate() : new Date(receiptToPrint.date)) : new Date(0);
+                                const rd = receiptToPrint.date.seconds ? receiptToPrint.date.toDate() : new Date(receiptToPrint.date);
                                 const hariReceipt = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][rd.getDay()];
                                 return (
                                     <>
@@ -20319,12 +20090,12 @@
                                     </>
                                 );
                             })()}
-                            <div className="border-b-2 border-dashed border-gray-300 my-2"></div> <div className="space-y-2 mb-4"> {(() => { let rcIdx = 0; return (receiptToPrint.items || []).map((item, idx) => { let displayName = item.name; if (item.isRacikanGroup) { rcIdx++; displayName = `Racikan ${rcIdx}`; } return ( <div key={idx} className="text-sm"> <div className="font-bold">{displayName}</div> <div className="flex justify-between"> <span>{item.cartQty} x {formatRupiah(item.price)}</span> <span>{formatRupiah(item.cartQty * item.price)}</span> </div> </div> ); }); })()} </div> <div className="border-b-2 border-dashed border-gray-300 my-2"></div> {(() => {
-  const subtotalR = (receiptToPrint.items || []).reduce((acc, item) => acc + (((item.originalPrice || item.price) || 0) * (item.cartQty || 0)), 0);
-  const diskonR = Math.max(0, subtotalR - (receiptToPrint.total || 0));
-  const discountedR = (receiptToPrint.items || []).filter(i => i.discount && i.discount.value > 0);
-  const uniqTypesR = [...new Set(discountedR.map(i => i.discount?.type).filter(Boolean))];
-  const uniqValuesR = [...new Set(discountedR.map(i => i.discount?.value).filter(v => v !== undefined))];
+                            <div className="border-b-2 border-dashed border-gray-300 my-2"></div> <div className="space-y-2 mb-4"> {(() => { let rcIdx = 0; return receiptToPrint.items.map((item, idx) => { let displayName = item.name; if (item.isRacikanGroup) { rcIdx++; displayName = `Racikan ${rcIdx}`; } return ( <div key={idx} className="text-sm"> <div className="font-bold">{displayName}</div> <div className="flex justify-between"> <span>{item.cartQty} x {formatRupiah(item.price)}</span> <span>{formatRupiah(item.cartQty * item.price)}</span> </div> </div> ); }); })()} </div> <div className="border-b-2 border-dashed border-gray-300 my-2"></div> {(() => {
+  const subtotalR = receiptToPrint.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * item.cartQty), 0);
+  const diskonR = subtotalR - receiptToPrint.total;
+  const discountedR = receiptToPrint.items.filter(i => i.discount && i.discount.value > 0);
+  const uniqTypesR = [...new Set(discountedR.map(i => i.discount.type))];
+  const uniqValuesR = [...new Set(discountedR.map(i => i.discount.value))];
   let diskonLabelR = 'Diskon';
   if (discountedR.length > 0 && uniqTypesR.length === 1) {
     if (uniqTypesR[0] === '%') {
@@ -20830,38 +20601,8 @@
                 </div>
             );
         };
-
-        // ── Error Boundary: tampil pesan bukan blank putih ────────────────────────
-        class ErrorBoundary extends React.Component {
-            constructor(props) { super(props); this.state = { hasError: false, error: null }; }
-            static getDerivedStateFromError(error) { return { hasError: true, error }; }
-            componentDidCatch(error, info) { console.error("[App Error]", error, info); }
-            render() {
-                if (this.state.hasError) {
-                    return React.createElement("div", {
-                        style: { display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:"#f8fafc", padding:"24px", textAlign:"center", fontFamily:"sans-serif" }
-                    },
-                        React.createElement("div", { style: { fontSize:"48px", marginBottom:"16px" } }, "⚠️"),
-                        React.createElement("h2", { style: { color:"#1e293b", marginBottom:"8px", fontSize:"20px" } }, "Terjadi Kesalahan"),
-                        React.createElement("p", { style: { color:"#64748b", marginBottom:"8px", maxWidth:"420px", fontSize:"14px" } }, this.state.error?.message || "Unknown error"),
-                        React.createElement("p", { style: { color:"#94a3b8", marginBottom:"24px", fontSize:"12px" } }, "Coba muat ulang, atau logout lalu login kembali"),
-                        React.createElement("button", {
-                            onClick: () => window.location.reload(),
-                            style: { background:"#0ea5e9", color:"white", border:"none", borderRadius:"10px", padding:"12px 28px", fontSize:"14px", fontWeight:"700", cursor:"pointer", marginRight:"8px" }
-                        }, "🔄 Muat Ulang"),
-                        React.createElement("button", {
-                            onClick: () => { localStorage.removeItem("husna_auth_session"); window.location.reload(); },
-                            style: { background:"#f1f5f9", color:"#475569", border:"none", borderRadius:"10px", padding:"12px 28px", fontSize:"14px", fontWeight:"700", cursor:"pointer", marginTop:"8px" }
-                        }, "🚪 Logout & Muat Ulang")
-                    );
-                }
-                return this.props.children;
-            }
-        }
-
-        const root = ReactDOM.createRoot(document.getElementById("root"));
-        root.render(React.createElement(ErrorBoundary, null, React.createElement(App)));
-        if (window.__bootDone) window.__bootDone();
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 <audio id="chaching-sound" src="cha-ching.mp3" preload="auto"></audio>
 </body>
