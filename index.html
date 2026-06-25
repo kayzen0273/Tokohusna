@@ -78,10 +78,41 @@
     <script>
     (function () {
         'use strict';
+        // ── Safe fallback: jika Supabase SDK gagal dimuat, set fungsi no-op ──
+        function _setupFallbacks(reason) {
+            console.error('[Supabase] Init gagal, mode offline:', reason);
+            const _auth = { currentUser: null, _cbs: [] };
+            window.db  = { _fallback: true };
+            window.auth = _auth;
+            window.appId = 'default-app-id';
+            window.initialAuthToken = null;
+            window.signInAnonymously = async () => ({ user: null });
+            window.signInWithCustomToken = async () => ({ user: null });
+            window.onAuthStateChanged = function(a, cb) { setTimeout(()=>cb(null),50); return ()=>{}; };
+            window.collection = (...a) => ({ _type:'col', _col:'_fallback', _constraints:[] });
+            window.doc        = (...a) => ({ _type:'doc', _col:'_fallback', _id:null });
+            window.query      = (r,...c) => r;
+            window.orderBy    = ()=>({});
+            window.where      = ()=>({});
+            window.limit      = ()=>({});
+            window.increment  = n=>({ _inc:n });
+            window.serverTimestamp = ()=>new Date().toISOString();
+            window.onSnapshot = ()=>()=>{};
+            window.getDocs    = async()=>({ docs:[], empty:true, forEach:()=>{} });
+            window.getDoc     = async()=>({ exists:()=>false, data:()=>null, id:'' });
+            window.addDoc     = async()=>({ id:'_fallback_'+Date.now() });
+            window.setDoc     = async()=>{};
+            window.updateDoc  = async()=>{};
+            window.deleteDoc  = async()=>{};
+            window.writeBatch = ()=>({ set:()=>{}, update:()=>{}, delete:()=>{}, commit:async()=>{} });
+        }
+
+        try {
 
         /* ── KONFIGURASI SUPABASE ───────────────────────────────────── */
         const SUPABASE_URL  = "https://mnuunkrkoeqjzbxceodc.supabase.co";
         const SUPABASE_KEY  = "sb_publishable_y4wpNCwGFOrPKBrVDwv7MA_yrgCzPWF";
+        if (!window.supabase) throw new Error('Supabase SDK belum dimuat');
 
         const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         window._supabase = sb; // raw client untuk debugging
@@ -408,6 +439,8 @@
                                       ? __initial_auth_token : null;
 
         console.log('[Supabase] Compatibility layer aktif →', SUPABASE_URL);
+
+        } catch(err) { _setupFallbacks(err); }
     })();
     </script>
 
@@ -579,6 +612,13 @@
     </style>
 </head>
 <body class="relative">
+    <!-- Loading screen muncul sebelum React/CDN selesai dimuat -->
+    <div id="app-init-loader" style="position:fixed;inset:0;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;font-family:Inter,sans-serif;">
+        <div style="width:44px;height:44px;border:4px solid #e2e8f0;border-top-color:#0ea5e9;border-radius:50%;animation:_spin 1s linear infinite;margin-bottom:16px;"></div>
+        <p style="color:#0ea5e9;font-weight:700;font-size:15px;margin:0 0 4px;">Husna Group</p>
+        <p style="color:#94a3b8;font-size:12px;margin:0;">Memuat aplikasi...</p>
+        <style>@keyframes _spin{to{transform:rotate(360deg)}}</style>
+    </div>
     <div id="root" class="relative z-10"></div>
 
     <!-- React App (Babel) -->
@@ -19707,10 +19747,20 @@
             }, [allowedStores, settingsData.storeProfiles, settingsData.globalAllowedStores]);
 
             useEffect(() => {
-                const initAuth = async () => { if (window.initialAuthToken) { await window.signInWithCustomToken(window.auth, window.initialAuthToken); } else { await window.signInAnonymously(window.auth); } };
+                const initAuth = async () => { 
+                    try {
+                        if (window.initialAuthToken) { await window.signInWithCustomToken(window.auth, window.initialAuthToken); } else { await window.signInAnonymously(window.auth); }
+                    } catch(e) { console.warn('[Auth] signIn gagal:', e.message); }
+                };
                 if (authSession) initAuth();
-                const unsubscribeAuth = window.onAuthStateChanged(window.auth, (currentUser) => { setUser(currentUser); if (!currentUser) setLoading(true); });
-                return () => unsubscribeAuth();
+                let unsubscribeAuth = () => {};
+                try {
+                    unsubscribeAuth = window.onAuthStateChanged(window.auth, (currentUser) => { setUser(currentUser); if (!currentUser) setLoading(true); });
+                } catch(e) {
+                    console.warn('[Auth] onAuthStateChanged gagal:', e.message);
+                    setUser(null);
+                }
+                return () => { try { unsubscribeAuth(); } catch(e) {} };
             }, [authSession]);
 
             useEffect(() => { const globalClickHandler = (e) => { triggerFireworks(e.clientX, e.clientY); }; window.addEventListener('click', globalClickHandler); return () => window.removeEventListener('click', globalClickHandler); }, []);
@@ -20603,6 +20653,9 @@
         };
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
+        // Hapus loading screen setelah React berhasil mount
+        const _loader = document.getElementById('app-init-loader');
+        if (_loader) _loader.remove();
     </script>
 <audio id="chaching-sound" src="cha-ching.mp3" preload="auto"></audio>
 </body>
