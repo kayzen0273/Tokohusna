@@ -72,145 +72,74 @@
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
-    <!-- Database Supabase — data disimpan di cloud PostgreSQL via Supabase -->
-    <!--
-    =============================================================
-    SETUP WAJIB — Jalankan SQL ini di Supabase SQL Editor:
-    https://app.supabase.com → project → SQL Editor → New Query
-    =============================================================
-
-    CREATE TABLE IF NOT EXISTS documents (
-      id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-      collection_path TEXT NOT NULL,
-      doc_id          TEXT NOT NULL,
-      data            JSONB NOT NULL DEFAULT '{}',
-      created_at      TIMESTAMPTZ DEFAULT NOW(),
-      updated_at      TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(collection_path, doc_id)
-    );
-    ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
-    CREATE POLICY "allow_all_anon" ON documents FOR ALL TO anon USING (true) WITH CHECK (true);
-    ALTER PUBLICATION supabase_realtime ADD TABLE documents;
-
-    =============================================================
-    -->
+    <!-- Database Supabase (PostgreSQL cloud via Supabase) -->
     <script>
 (function () {
     'use strict';
 
-    // ============================================================
-    // Supabase Adapter v2 — pengganti database lokal IndexedDB
-    // Menggunakan Supabase REST API + Realtime.
-    // API window identik dengan versi lokal — kode React tidak berubah.
-    // ============================================================
-
     var SUPABASE_URL = 'https://mnuunkrkoeqjzbxceodc.supabase.co';
     var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1udXVua3Jrb2VxanpieGNlb2RjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxNTc4NDQsImV4cCI6MjA5NzczMzg0NH0.Ww8R_sukOnfCo4EbBK90T0ZyYomw9LzL0wpHISn97s8';
 
-    // Buat client tanpa session Supabase Auth — anon key sudah cukup
     var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-            detectSessionInUrl: false
-        }
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
     });
 
-    // ── Test koneksi saat pertama kali dimuat ─────────────────────
-    // Memberi tahu pengguna jika tabel belum dibuat atau ada masalah lain.
+    // ── Test koneksi otomatis ─────────────────────────────────────
     setTimeout(function () {
         sb.from('documents').select('doc_id').limit(1).then(function (res) {
             if (!res.error) {
-                console.log('%c[Husna DB] ✅ Terhubung ke Supabase', 'color:green;font-weight:bold');
+                console.log('[Husna DB] Terhubung ke Supabase');
                 return;
             }
-            var msg = (res.error && (res.error.message || res.error.hint || '')) + '';
-            var isTableMissing = msg.toLowerCase().includes('does not exist')
-                || msg.toLowerCase().includes('42p01')
-                || msg.toLowerCase().includes('relation')
+            var msg = (res.error.message || res.error.hint || '') + '';
+            var tableMissing = msg.toLowerCase().indexOf('does not exist') !== -1
+                || msg.toLowerCase().indexOf('relation') !== -1
                 || res.error.code === '42P01'
                 || res.error.code === 'PGRST204';
 
-            if (isTableMissing) {
-                console.error('[Husna DB] ❌ Tabel "documents" tidak ditemukan!');
-                var setupMsg =
-                    '⚠️  SETUP DATABASE BELUM DILAKUKAN
+            var sql = 'CREATE TABLE IF NOT EXISTS documents (\n'
+                + '  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,\n'
+                + '  collection_path TEXT NOT NULL,\n'
+                + '  doc_id TEXT NOT NULL,\n'
+                + '  data JSONB NOT NULL DEFAULT \'{}\',\n'
+                + '  created_at TIMESTAMPTZ DEFAULT NOW(),\n'
+                + '  updated_at TIMESTAMPTZ DEFAULT NOW(),\n'
+                + '  UNIQUE(collection_path, doc_id)\n'
+                + ');\n'
+                + 'ALTER TABLE documents ENABLE ROW LEVEL SECURITY;\n'
+                + 'CREATE POLICY "allow_all_anon" ON documents FOR ALL TO anon USING (true) WITH CHECK (true);\n'
+                + 'ALTER PUBLICATION supabase_realtime ADD TABLE documents;';
 
-' +
-                    'Tabel "documents" belum ada di Supabase.
-
-' +
-                    'Cara perbaiki:
-' +
-                    '1. Buka https://app.supabase.com
-' +
-                    '2. Pilih project kamu → SQL Editor → New Query
-' +
-                    '3. Salin & jalankan SQL ini:
-
-' +
-                    'CREATE TABLE IF NOT EXISTS documents (
-' +
-                    '  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-' +
-                    '  collection_path TEXT NOT NULL,
-' +
-                    '  doc_id          TEXT NOT NULL,
-' +
-                    '  data            JSONB NOT NULL DEFAULT \'{}\',
-' +
-                    '  created_at      TIMESTAMPTZ DEFAULT NOW(),
-' +
-                    '  updated_at      TIMESTAMPTZ DEFAULT NOW(),
-' +
-                    '  UNIQUE(collection_path, doc_id)
-' +
-                    ');
-' +
-                    'ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
-' +
-                    'CREATE POLICY "allow_all_anon" ON documents FOR ALL TO anon USING (true) WITH CHECK (true);
-' +
-                    'ALTER PUBLICATION supabase_realtime ADD TABLE documents;
-
-' +
-                    '4. Refresh halaman ini setelah selesai.';
-                alert(setupMsg);
+            if (tableMissing) {
+                alert('SETUP DATABASE BELUM DILAKUKAN\n\n'
+                    + 'Tabel "documents" belum ada di Supabase.\n\n'
+                    + 'Cara:\n'
+                    + '1. Buka https://app.supabase.com\n'
+                    + '2. SQL Editor > New Query\n'
+                    + '3. Jalankan SQL ini:\n\n'
+                    + sql
+                    + '\n\n4. Refresh halaman ini.');
             } else {
-                console.error('[Husna DB] ❌ Koneksi gagal:', res.error);
-                alert(
-                    '⚠️  GAGAL TERHUBUNG KE DATABASE SUPABASE
-
-' +
-                    'Error: ' + msg + '
-
-' +
-                    'Periksa:
-' +
-                    '• Tabel "documents" sudah dibuat
-' +
-                    '• RLS policy "allow_all_anon" sudah ada
-' +
-                    '• Koneksi internet aktif
-' +
-                    '• Buka Console browser (F12) untuk detail'
-                );
+                console.error('[Husna DB] Koneksi gagal:', res.error);
+                alert('GAGAL TERHUBUNG KE SUPABASE\n\nError: ' + msg
+                    + '\n\nPastikan:\n'
+                    + '- Tabel "documents" sudah dibuat\n'
+                    + '- RLS policy sudah diaktifkan\n'
+                    + '- Koneksi internet aktif');
             }
         }).catch(function (e) {
-            console.error('[Husna DB] ❌ Network error:', e);
+            console.error('[Husna DB] Network error:', e);
         });
-    }, 500);
+    }, 800);
 
-    // ── Utilitas dasar ────────────────────────────────────────────
+    // ── Utilitas ──────────────────────────────────────────────────
     function genId() {
         return 'S' + Date.now().toString(36) + Math.random().toString(36).slice(2, 11);
     }
-
     function serverTimestamp() { return { __sentinel: 'serverTimestamp' }; }
     function increment(n) { return { __sentinel: 'increment', value: n }; }
     function nowIso() { return new Date().toISOString(); }
 
-    // String ISO → objek mirip Firestore Timestamp
     function hydrateValue(x) {
         if (x === null || x === undefined) return x;
         if (typeof x === 'string' && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(x)) {
@@ -221,34 +150,25 @@
                     nanoseconds: (ms % 1000) * 1e6,
                     toDate: function () { return new Date(ms); },
                     toMillis: function () { return ms; },
-                    isEqual: function (other) {
-                        return !!(other && typeof other.toMillis === 'function' && other.toMillis() === ms);
-                    }
+                    isEqual: function (o) { return !!(o && typeof o.toMillis === 'function' && o.toMillis() === ms); }
                 };
             }
         }
         if (typeof x !== 'object') return x;
         if (Array.isArray(x)) return x.map(hydrateValue);
         var out = {};
-        for (var k in x) {
-            if (Object.prototype.hasOwnProperty.call(x, k)) out[k] = hydrateValue(x[k]);
-        }
+        for (var k in x) { if (Object.prototype.hasOwnProperty.call(x, k)) out[k] = hydrateValue(x[k]); }
         return out;
     }
 
     function getDeep(obj, path) {
-        var parts = path.split('.');
-        var cur = obj;
-        for (var i = 0; i < parts.length; i++) {
-            if (cur == null) return undefined;
-            cur = cur[parts[i]];
-        }
+        var parts = path.split('.'), cur = obj;
+        for (var i = 0; i < parts.length; i++) { if (cur == null) return undefined; cur = cur[parts[i]]; }
         return cur;
     }
 
     function setDeep(obj, path, value) {
-        var parts = path.split('.');
-        var cur = obj;
+        var parts = path.split('.'), cur = obj;
         for (var i = 0; i < parts.length - 1; i++) {
             if (typeof cur[parts[i]] !== 'object' || cur[parts[i]] === null) cur[parts[i]] = {};
             cur = cur[parts[i]];
@@ -263,8 +183,7 @@
             if (val && typeof val === 'object' && val.__sentinel === 'serverTimestamp') {
                 setDeep(result, key, nowIso());
             } else if (val && typeof val === 'object' && val.__sentinel === 'increment') {
-                var cur = Number(getDeep(result, key)) || 0;
-                setDeep(result, key, cur + val.value);
+                setDeep(result, key, (Number(getDeep(result, key)) || 0) + val.value);
             } else {
                 setDeep(result, key, val);
             }
@@ -272,64 +191,54 @@
         return result;
     }
 
-    // ── Tipe referensi ────────────────────────────────────────────
+    // ── Referensi ─────────────────────────────────────────────────
     function isCollRef(x) { return !!x && x.__type === 'collection'; }
     function isDocRef(x)  { return !!x && x.__type === 'doc'; }
-    function isQueryRef(x) { return !!x && x.__type === 'query'; }
+    function isQueryRef(x){ return !!x && x.__type === 'query'; }
 
     function collection() {
-        var segs = Array.prototype.slice.call(arguments, 1);
-        return { __type: 'collection', path: segs.join('/') };
+        return { __type: 'collection', path: Array.prototype.slice.call(arguments, 1).join('/') };
     }
-
     function doc() {
         var first = arguments[0];
         if (isCollRef(first)) {
             var id = arguments[1];
-            if (id === undefined || id === null) id = genId();
-            return { __type: 'doc', path: first.path, id: String(id) };
+            return { __type: 'doc', path: first.path, id: String(id != null ? id : genId()) };
         }
         var segs = Array.prototype.slice.call(arguments, 1);
         var lastId = segs.pop();
         return { __type: 'doc', path: segs.join('/'), id: String(lastId) };
     }
-
     function query(base) {
-        var newConstraints = Array.prototype.slice.call(arguments, 1);
+        var newC = Array.prototype.slice.call(arguments, 1);
         var baseRef = isQueryRef(base) ? base.base : base;
-        var prevConstraints = isQueryRef(base) ? base.constraints : [];
-        return { __type: 'query', base: baseRef, constraints: prevConstraints.concat(newConstraints) };
+        var prevC   = isQueryRef(base) ? base.constraints : [];
+        return { __type: 'query', base: baseRef, constraints: prevC.concat(newC) };
     }
+    function where(f, op, v)  { return { __c: 'where',   field: f, op: op, value: v }; }
+    function orderBy(f, dir)  { return { __c: 'orderBy', field: f, dir: dir || 'asc' }; }
+    function limit(n)         { return { __c: 'limit',   n: n }; }
+    function resolveQ(r) { return isQueryRef(r) ? r : { __type: 'query', base: r, constraints: [] }; }
 
-    function where(field, op, value)  { return { __c: 'where',   field: field, op: op, value: value }; }
-    function orderBy(field, dir)      { return { __c: 'orderBy', field: field, dir: dir || 'asc' }; }
-    function limit(n)                 { return { __c: 'limit',   n: n }; }
-
-    function resolveToQuery(refOrQuery) {
-        if (isQueryRef(refOrQuery)) return refOrQuery;
-        return { __type: 'query', base: refOrQuery, constraints: [] };
-    }
-
-    // ── Filter & sort sisi klien ──────────────────────────────────
-    function matchWhere(v, op, value) {
+    // ── Filter client-side ────────────────────────────────────────
+    function matchWhere(v, op, val) {
         switch (op) {
-            case '==':               return v === value;
-            case '!=':               return v !== value;
-            case '>':                return v > value;
-            case '>=':               return v >= value;
-            case '<':                return v < value;
-            case '<=':               return v <= value;
-            case 'in':               return Array.isArray(value) && value.indexOf(v) !== -1;
-            case 'not-in':           return Array.isArray(value) && value.indexOf(v) === -1;
-            case 'array-contains':   return Array.isArray(v) && v.indexOf(value) !== -1;
+            case '==': return v === val;
+            case '!=': return v !== val;
+            case '>':  return v >   val;
+            case '>=': return v >=  val;
+            case '<':  return v <   val;
+            case '<=': return v <=  val;
+            case 'in': return Array.isArray(val) && val.indexOf(v) !== -1;
+            case 'not-in': return Array.isArray(val) && val.indexOf(v) === -1;
+            case 'array-contains': return Array.isArray(v) && v.indexOf(val) !== -1;
             case 'array-contains-any':
-                return Array.isArray(v) && Array.isArray(value) &&
-                       v.some(function (x) { return value.indexOf(x) !== -1; });
+                return Array.isArray(v) && Array.isArray(val) && v.some(function (x) { return val.indexOf(x) !== -1; });
             default: return true;
         }
     }
 
-    function applyClientFilters(rows, constraints) {
+    function applyFilters(rows, constraints) {
         var wheres = constraints.filter(function (c) { return c.__c === 'where'; });
         rows = rows.filter(function (row) {
             for (var i = 0; i < wheres.length; i++) {
@@ -337,174 +246,121 @@
             }
             return true;
         });
-        var orderClauses = constraints.filter(function (c) { return c.__c === 'orderBy'; });
-        if (orderClauses.length) {
+        var orders = constraints.filter(function (c) { return c.__c === 'orderBy'; });
+        if (orders.length) {
             rows = rows.slice().sort(function (a, b) {
-                for (var i = 0; i < orderClauses.length; i++) {
-                    var c = orderClauses[i];
-                    var av = getDeep(a.data, c.field);
-                    var bv = getDeep(b.data, c.field);
+                for (var i = 0; i < orders.length; i++) {
+                    var c = orders[i];
+                    var av = getDeep(a.data, c.field), bv = getDeep(b.data, c.field);
                     if (av == null && bv == null) continue;
                     if (av == null) return c.dir === 'desc' ? 1 : -1;
                     if (bv == null) return c.dir === 'desc' ? -1 : 1;
-                    if (av < bv)  return c.dir === 'desc' ? 1  : -1;
-                    if (av > bv)  return c.dir === 'desc' ? -1 : 1;
+                    if (av < bv) return c.dir === 'desc' ? 1 : -1;
+                    if (av > bv) return c.dir === 'desc' ? -1 : 1;
                 }
                 return 0;
             });
         }
-        var limitC = constraints.filter(function (c) { return c.__c === 'limit'; }).pop();
-        if (limitC) rows = rows.slice(0, limitC.n);
+        var lim = constraints.filter(function (c) { return c.__c === 'limit'; }).pop();
+        if (lim) rows = rows.slice(0, lim.n);
         return rows;
     }
 
-    // ── Snapshot builders ─────────────────────────────────────────
-    function buildDocSnap(id, data, exists) {
+    // ── Snapshot ──────────────────────────────────────────────────
+    function buildDoc(id, data, exists) {
         return {
             id: id,
             exists: function () { return exists; },
             data: function () { return exists ? hydrateValue(JSON.parse(JSON.stringify(data))) : undefined; }
         };
     }
-
-    function buildCollSnap(rows) {
-        var docs = rows.map(function (r) { return buildDocSnap(r.doc_id, r.data, true); });
-        return {
-            docs: docs, empty: docs.length === 0, size: docs.length,
-            forEach: function (fn) { docs.forEach(fn); }
-        };
+    function buildColl(rows) {
+        var docs = rows.map(function (r) { return buildDoc(r.doc_id, r.data, true); });
+        return { docs: docs, empty: !docs.length, size: docs.length, forEach: function (fn) { docs.forEach(fn); } };
     }
 
-    // ── Operasi baca ──────────────────────────────────────────────
+    // ── Baca ──────────────────────────────────────────────────────
     function getDoc(ref) {
-        return sb.from('documents')
-            .select('doc_id, data')
-            .eq('collection_path', ref.path)
-            .eq('doc_id', ref.id)
-            .maybeSingle()
+        return sb.from('documents').select('doc_id,data')
+            .eq('collection_path', ref.path).eq('doc_id', ref.id).maybeSingle()
             .then(function (res) {
                 if (res.error) throw res.error;
-                if (!res.data) return buildDocSnap(ref.id, null, false);
-                return buildDocSnap(res.data.doc_id, res.data.data, true);
+                return res.data ? buildDoc(res.data.doc_id, res.data.data, true) : buildDoc(ref.id, null, false);
             });
     }
-
     function getDocs(refOrQuery) {
-        var q = resolveToQuery(refOrQuery);
-        return sb.from('documents')
-            .select('doc_id, data')
-            .eq('collection_path', q.base.path)
+        var q = resolveQ(refOrQuery);
+        return sb.from('documents').select('doc_id,data').eq('collection_path', q.base.path)
             .then(function (res) {
                 if (res.error) throw res.error;
-                var rows = applyClientFilters(res.data || [], q.constraints);
-                return buildCollSnap(rows);
+                return buildColl(applyFilters(res.data || [], q.constraints));
             });
     }
 
-    // ── Realtime onSnapshot ───────────────────────────────────────
+    // ── Realtime ──────────────────────────────────────────────────
     function onSnapshot(refOrQuery, onNext, onError) {
         var docMode = isDocRef(refOrQuery);
-        var path = docMode ? refOrQuery.path : resolveToQuery(refOrQuery).base.path;
+        var path = docMode ? refOrQuery.path : resolveQ(refOrQuery).base.path;
         var active = true;
-
-        function fetchAndEmit() {
+        function fetch() {
             if (!active) return;
-            var p = docMode ? getDoc(refOrQuery) : getDocs(refOrQuery);
-            p.then(function (snap) { if (active) onNext(snap); })
-             .catch(function (e) {
-                 if (onError) onError(e);
-                 else console.error('[Husna DB] onSnapshot error:', path, e);
-             });
+            (docMode ? getDoc(refOrQuery) : getDocs(refOrQuery))
+                .then(function (s) { if (active) onNext(s); })
+                .catch(function (e) { if (onError) onError(e); else console.error('[Husna DB]', e); });
         }
-
-        fetchAndEmit(); // fetch awal
-
-        // Subscribe realtime changes
-        var chanKey = 'rt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-        var channel = sb.channel(chanKey)
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'public',
-                table: 'documents',
-                filter: 'collection_path=eq.' + path
-            }, function () { fetchAndEmit(); })
+        fetch();
+        var ch = sb.channel('ch_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'documents',
+                filter: 'collection_path=eq.' + path }, fetch)
             .subscribe();
-
-        return function unsubscribe() {
-            active = false;
-            sb.removeChannel(channel);
-        };
+        return function () { active = false; sb.removeChannel(ch); };
     }
 
-    // ── Operasi tulis ─────────────────────────────────────────────
+    // ── Tulis ─────────────────────────────────────────────────────
     function addDoc(ref, data) {
-        var id = genId();
-        var processed = processData(data, null);
-        return sb.from('documents').upsert({
-            collection_path: ref.path,
-            doc_id: id,
-            data: processed,
-            updated_at: nowIso()
-        }).then(function (res) {
-            if (res.error) throw res.error;
-            return { id: id, path: ref.path, __type: 'doc' };
-        });
+        var id = genId(), processed = processData(data, null);
+        return sb.from('documents').upsert({ collection_path: ref.path, doc_id: id, data: processed, updated_at: nowIso() })
+            .then(function (res) { if (res.error) throw res.error; return { id: id, path: ref.path, __type: 'doc' }; });
     }
-
-    function setDoc(ref, data, options) {
-        var merge = !!(options && options.merge);
+    function setDoc(ref, data, opts) {
+        var merge = !!(opts && opts.merge);
         var doUpsert = function (base) {
             var processed = processData(data, base || null);
-            return sb.from('documents').upsert({
-                collection_path: ref.path,
-                doc_id: ref.id,
-                data: processed,
-                updated_at: nowIso()
-            }, { onConflict: 'collection_path,doc_id' }).then(function (res) {
-                if (res.error) throw res.error;
-            });
+            return sb.from('documents')
+                .upsert({ collection_path: ref.path, doc_id: ref.id, data: processed, updated_at: nowIso() },
+                    { onConflict: 'collection_path,doc_id' })
+                .then(function (res) { if (res.error) throw res.error; });
         };
         if (!merge) return doUpsert(null);
-        return sb.from('documents')
-            .select('data').eq('collection_path', ref.path).eq('doc_id', ref.id).maybeSingle()
-            .then(function (res) {
-                if (res.error) throw res.error;
-                return doUpsert(res.data ? res.data.data : {});
-            });
+        return sb.from('documents').select('data').eq('collection_path', ref.path).eq('doc_id', ref.id).maybeSingle()
+            .then(function (res) { if (res.error) throw res.error; return doUpsert(res.data ? res.data.data : {}); });
     }
-
     function updateDoc(ref, data) {
-        return sb.from('documents')
-            .select('data').eq('collection_path', ref.path).eq('doc_id', ref.id).maybeSingle()
+        return sb.from('documents').select('data').eq('collection_path', ref.path).eq('doc_id', ref.id).maybeSingle()
             .then(function (res) {
                 if (res.error) throw res.error;
                 if (!res.data) throw new Error('Dokumen tidak ditemukan: ' + ref.path + '/' + ref.id);
                 var processed = processData(data, res.data.data);
-                return sb.from('documents')
-                    .update({ data: processed, updated_at: nowIso() })
+                return sb.from('documents').update({ data: processed, updated_at: nowIso() })
                     .eq('collection_path', ref.path).eq('doc_id', ref.id);
-            })
-            .then(function (res) { if (res && res.error) throw res.error; });
+            }).then(function (res) { if (res && res.error) throw res.error; });
     }
-
     function deleteDoc(ref) {
-        return sb.from('documents')
-            .delete().eq('collection_path', ref.path).eq('doc_id', ref.id)
+        return sb.from('documents').delete().eq('collection_path', ref.path).eq('doc_id', ref.id)
             .then(function (res) { if (res.error) throw res.error; });
     }
-
     function writeBatch() {
         var ops = [];
         var api = {
-            set:    function (r, d, o) { ops.push({ type:'set',    ref:r, data:d, options:o }); return api; },
-            update: function (r, d)    { ops.push({ type:'update', ref:r, data:d          }); return api; },
-            delete: function (r)       { ops.push({ type:'delete', ref:r                  }); return api; },
+            set:    function (r, d, o) { ops.push({ t: 'set',    r: r, d: d, o: o }); return api; },
+            update: function (r, d)    { ops.push({ t: 'update', r: r, d: d       }); return api; },
+            delete: function (r)       { ops.push({ t: 'delete', r: r             }); return api; },
             commit: function () {
                 return ops.reduce(function (p, op) {
                     return p.then(function () {
-                        if (op.type === 'set')    return setDoc(op.ref, op.data, op.options);
-                        if (op.type === 'update') return updateDoc(op.ref, op.data);
-                        if (op.type === 'delete') return deleteDoc(op.ref);
+                        if (op.t === 'set')    return setDoc(op.r, op.d, op.o);
+                        if (op.t === 'update') return updateDoc(op.r, op.d);
+                        if (op.t === 'delete') return deleteDoc(op.r);
                     });
                 }, Promise.resolve());
             }
@@ -512,62 +368,43 @@
         return api;
     }
 
-    // ── Auth ──────────────────────────────────────────────────────
-    // Tidak menggunakan Supabase Auth — anon key sudah cukup untuk
-    // akses data. Kita buat "user lokal" sederhana untuk kompatibilitas
-    // dengan kode React yang menunggu onAuthStateChanged.
+    // ── Auth sederhana (tidak pakai Supabase Auth) ────────────────
     function _localUser() {
         var uid;
         try {
             uid = localStorage.getItem('husna_uid');
-            if (!uid) {
-                uid = 'anon_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
-                localStorage.setItem('husna_uid', uid);
-            }
-        } catch (e) { uid = 'anon_local'; }
+            if (!uid) { uid = 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem('husna_uid', uid); }
+        } catch (e) { uid = 'u_local'; }
         return { uid: uid, id: uid, isAnonymous: true };
     }
+    var _usr = _localUser();
+    function signInAnonymously()       { return Promise.resolve({ user: _usr }); }
+    function signInWithCustomToken()   { return Promise.resolve({ user: _usr }); }
+    function onAuthStateChanged(_, cb) { setTimeout(function () { cb(_usr); }, 0); return function () {}; }
 
-    var _user = _localUser();
-
-    // Langsung kembalikan user tanpa perlu call Supabase Auth
-    function signInAnonymously() {
-        return Promise.resolve({ user: _user });
-    }
-
-    function signInWithCustomToken() {
-        return Promise.resolve({ user: _user });
-    }
-
-    function onAuthStateChanged(_auth, callback) {
-        // Panggil callback segera (mirip implementasi lokal asli)
-        setTimeout(function () { callback(_user); }, 0);
-        return function unsubscribe() {};
-    }
-
-    // ── Ekspos ke window ──────────────────────────────────────────
-    window.db              = { __supabaseDb: true };
-    window.auth            = { __supabaseAuth: true };
-    window.signInAnonymously   = signInAnonymously;
-    window.signInWithCustomToken = signInWithCustomToken;
-    window.onAuthStateChanged  = onAuthStateChanged;
-    window.collection      = collection;
-    window.addDoc          = addDoc;
-    window.updateDoc       = updateDoc;
-    window.deleteDoc       = deleteDoc;
-    window.setDoc          = setDoc;
-    window.getDoc          = getDoc;
-    window.getDocs         = getDocs;
-    window.doc             = doc;
-    window.onSnapshot      = onSnapshot;
-    window.serverTimestamp = serverTimestamp;
-    window.writeBatch      = writeBatch;
-    window.query           = query;
-    window.orderBy         = orderBy;
-    window.where           = where;
-    window.increment       = increment;
-    window.limit           = limit;
-    window.appId           = 'default-app-id';
+    // ── Export ────────────────────────────────────────────────────
+    window.db = { __supabaseDb: true };
+    window.auth = { __supabaseAuth: true };
+    window.signInAnonymously    = signInAnonymously;
+    window.signInWithCustomToken= signInWithCustomToken;
+    window.onAuthStateChanged   = onAuthStateChanged;
+    window.collection     = collection;
+    window.addDoc         = addDoc;
+    window.updateDoc      = updateDoc;
+    window.deleteDoc      = deleteDoc;
+    window.setDoc         = setDoc;
+    window.getDoc         = getDoc;
+    window.getDocs        = getDocs;
+    window.doc            = doc;
+    window.onSnapshot     = onSnapshot;
+    window.serverTimestamp= serverTimestamp;
+    window.writeBatch     = writeBatch;
+    window.query          = query;
+    window.orderBy        = orderBy;
+    window.where          = where;
+    window.increment      = increment;
+    window.limit          = limit;
+    window.appId          = 'default-app-id';
     window.initialAuthToken = null;
 })();
     </script>
