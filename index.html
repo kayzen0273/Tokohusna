@@ -75,8 +75,8 @@
     <!-- Database Supabase — data disimpan di cloud PostgreSQL via Supabase -->
     <!--
     =============================================================
-    SETUP WAJIB: Jalankan SQL ini di Supabase SQL Editor:
-    https://app.supabase.com → project → SQL Editor
+    SETUP WAJIB — Jalankan SQL ini di Supabase SQL Editor:
+    https://app.supabase.com → project → SQL Editor → New Query
     =============================================================
 
     CREATE TABLE IF NOT EXISTS documents (
@@ -89,9 +89,7 @@
       UNIQUE(collection_path, doc_id)
     );
     ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
-    CREATE POLICY "Allow all anon"
-      ON documents FOR ALL TO anon
-      USING (true) WITH CHECK (true);
+    CREATE POLICY "allow_all_anon" ON documents FOR ALL TO anon USING (true) WITH CHECK (true);
     ALTER PUBLICATION supabase_realtime ADD TABLE documents;
 
     =============================================================
@@ -101,28 +99,118 @@
     'use strict';
 
     // ============================================================
-    // Adapter Supabase — pengganti database lokal IndexedDB
-    // Data disimpan di PostgreSQL cloud via Supabase, dengan API
-    // yang identik (collection/doc/addDoc/onSnapshot/query/dst)
-    // sehingga seluruh kode aplikasi tidak perlu diubah sama sekali.
+    // Supabase Adapter v2 — pengganti database lokal IndexedDB
+    // Menggunakan Supabase REST API + Realtime.
+    // API window identik dengan versi lokal — kode React tidak berubah.
     // ============================================================
 
     var SUPABASE_URL = 'https://mnuunkrkoeqjzbxceodc.supabase.co';
     var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1udXVua3Jrb2VxanpieGNlb2RjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxNTc4NDQsImV4cCI6MjA5NzczMzg0NH0.Ww8R_sukOnfCo4EbBK90T0ZyYomw9LzL0wpHISn97s8';
 
-    var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // Buat client tanpa session Supabase Auth — anon key sudah cukup
+    var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false
+        }
+    });
 
-    // ---------- Utilitas dasar ----------
+    // ── Test koneksi saat pertama kali dimuat ─────────────────────
+    // Memberi tahu pengguna jika tabel belum dibuat atau ada masalah lain.
+    setTimeout(function () {
+        sb.from('documents').select('doc_id').limit(1).then(function (res) {
+            if (!res.error) {
+                console.log('%c[Husna DB] ✅ Terhubung ke Supabase', 'color:green;font-weight:bold');
+                return;
+            }
+            var msg = (res.error && (res.error.message || res.error.hint || '')) + '';
+            var isTableMissing = msg.toLowerCase().includes('does not exist')
+                || msg.toLowerCase().includes('42p01')
+                || msg.toLowerCase().includes('relation')
+                || res.error.code === '42P01'
+                || res.error.code === 'PGRST204';
+
+            if (isTableMissing) {
+                console.error('[Husna DB] ❌ Tabel "documents" tidak ditemukan!');
+                var setupMsg =
+                    '⚠️  SETUP DATABASE BELUM DILAKUKAN
+
+' +
+                    'Tabel "documents" belum ada di Supabase.
+
+' +
+                    'Cara perbaiki:
+' +
+                    '1. Buka https://app.supabase.com
+' +
+                    '2. Pilih project kamu → SQL Editor → New Query
+' +
+                    '3. Salin & jalankan SQL ini:
+
+' +
+                    'CREATE TABLE IF NOT EXISTS documents (
+' +
+                    '  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+' +
+                    '  collection_path TEXT NOT NULL,
+' +
+                    '  doc_id          TEXT NOT NULL,
+' +
+                    '  data            JSONB NOT NULL DEFAULT \'{}\',
+' +
+                    '  created_at      TIMESTAMPTZ DEFAULT NOW(),
+' +
+                    '  updated_at      TIMESTAMPTZ DEFAULT NOW(),
+' +
+                    '  UNIQUE(collection_path, doc_id)
+' +
+                    ');
+' +
+                    'ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+' +
+                    'CREATE POLICY "allow_all_anon" ON documents FOR ALL TO anon USING (true) WITH CHECK (true);
+' +
+                    'ALTER PUBLICATION supabase_realtime ADD TABLE documents;
+
+' +
+                    '4. Refresh halaman ini setelah selesai.';
+                alert(setupMsg);
+            } else {
+                console.error('[Husna DB] ❌ Koneksi gagal:', res.error);
+                alert(
+                    '⚠️  GAGAL TERHUBUNG KE DATABASE SUPABASE
+
+' +
+                    'Error: ' + msg + '
+
+' +
+                    'Periksa:
+' +
+                    '• Tabel "documents" sudah dibuat
+' +
+                    '• RLS policy "allow_all_anon" sudah ada
+' +
+                    '• Koneksi internet aktif
+' +
+                    '• Buka Console browser (F12) untuk detail'
+                );
+            }
+        }).catch(function (e) {
+            console.error('[Husna DB] ❌ Network error:', e);
+        });
+    }, 500);
+
+    // ── Utilitas dasar ────────────────────────────────────────────
     function genId() {
         return 'S' + Date.now().toString(36) + Math.random().toString(36).slice(2, 11);
     }
 
     function serverTimestamp() { return { __sentinel: 'serverTimestamp' }; }
     function increment(n) { return { __sentinel: 'increment', value: n }; }
-
     function nowIso() { return new Date().toISOString(); }
 
-    // Konversi string ISO timestamp → objek mirip Firestore Timestamp
+    // String ISO → objek mirip Firestore Timestamp
     function hydrateValue(x) {
         if (x === null || x === undefined) return x;
         if (typeof x === 'string' && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(x)) {
@@ -168,7 +256,6 @@
         cur[parts[parts.length - 1]] = value;
     }
 
-    // Proses data mentah (sentinel, dot-notation) → object final
     function processData(data, existingData) {
         var result = existingData ? JSON.parse(JSON.stringify(existingData)) : {};
         Object.keys(data).forEach(function (key) {
@@ -185,9 +272,9 @@
         return result;
     }
 
-    // ---------- Tipe referensi ----------
+    // ── Tipe referensi ────────────────────────────────────────────
     function isCollRef(x) { return !!x && x.__type === 'collection'; }
-    function isDocRef(x) { return !!x && x.__type === 'doc'; }
+    function isDocRef(x)  { return !!x && x.__type === 'doc'; }
     function isQueryRef(x) { return !!x && x.__type === 'query'; }
 
     function collection() {
@@ -214,30 +301,30 @@
         return { __type: 'query', base: baseRef, constraints: prevConstraints.concat(newConstraints) };
     }
 
-    function where(field, op, value) { return { __c: 'where', field: field, op: op, value: value }; }
-    function orderBy(field, dir) { return { __c: 'orderBy', field: field, dir: dir || 'asc' }; }
-    function limit(n) { return { __c: 'limit', n: n }; }
+    function where(field, op, value)  { return { __c: 'where',   field: field, op: op, value: value }; }
+    function orderBy(field, dir)      { return { __c: 'orderBy', field: field, dir: dir || 'asc' }; }
+    function limit(n)                 { return { __c: 'limit',   n: n }; }
 
     function resolveToQuery(refOrQuery) {
         if (isQueryRef(refOrQuery)) return refOrQuery;
         return { __type: 'query', base: refOrQuery, constraints: [] };
     }
 
-    // ---------- Filter & sort sisi klien ----------
+    // ── Filter & sort sisi klien ──────────────────────────────────
     function matchWhere(v, op, value) {
         switch (op) {
-            case '==': return v === value;
-            case '!=': return v !== value;
-            case '>': return v > value;
-            case '>=': return v >= value;
-            case '<': return v < value;
-            case '<=': return v <= value;
-            case 'in': return Array.isArray(value) && value.indexOf(v) !== -1;
-            case 'not-in': return Array.isArray(value) && value.indexOf(v) === -1;
-            case 'array-contains': return Array.isArray(v) && v.indexOf(value) !== -1;
+            case '==':               return v === value;
+            case '!=':               return v !== value;
+            case '>':                return v > value;
+            case '>=':               return v >= value;
+            case '<':                return v < value;
+            case '<=':               return v <= value;
+            case 'in':               return Array.isArray(value) && value.indexOf(v) !== -1;
+            case 'not-in':           return Array.isArray(value) && value.indexOf(v) === -1;
+            case 'array-contains':   return Array.isArray(v) && v.indexOf(value) !== -1;
             case 'array-contains-any':
                 return Array.isArray(v) && Array.isArray(value) &&
-                    v.some(function (x) { return value.indexOf(x) !== -1; });
+                       v.some(function (x) { return value.indexOf(x) !== -1; });
             default: return true;
         }
     }
@@ -260,8 +347,8 @@
                     if (av == null && bv == null) continue;
                     if (av == null) return c.dir === 'desc' ? 1 : -1;
                     if (bv == null) return c.dir === 'desc' ? -1 : 1;
-                    if (av < bv) return c.dir === 'desc' ? 1 : -1;
-                    if (av > bv) return c.dir === 'desc' ? -1 : 1;
+                    if (av < bv)  return c.dir === 'desc' ? 1  : -1;
+                    if (av > bv)  return c.dir === 'desc' ? -1 : 1;
                 }
                 return 0;
             });
@@ -271,7 +358,7 @@
         return rows;
     }
 
-    // ---------- Snapshot builders ----------
+    // ── Snapshot builders ─────────────────────────────────────────
     function buildDocSnap(id, data, exists) {
         return {
             id: id,
@@ -282,10 +369,13 @@
 
     function buildCollSnap(rows) {
         var docs = rows.map(function (r) { return buildDocSnap(r.doc_id, r.data, true); });
-        return { docs: docs, empty: docs.length === 0, size: docs.length, forEach: function (fn) { docs.forEach(fn); } };
+        return {
+            docs: docs, empty: docs.length === 0, size: docs.length,
+            forEach: function (fn) { docs.forEach(fn); }
+        };
     }
 
-    // ---------- Operasi baca ----------
+    // ── Operasi baca ──────────────────────────────────────────────
     function getDoc(ref) {
         return sb.from('documents')
             .select('doc_id, data')
@@ -311,7 +401,7 @@
             });
     }
 
-    // ---------- Realtime onSnapshot ----------
+    // ── Realtime onSnapshot ───────────────────────────────────────
     function onSnapshot(refOrQuery, onNext, onError) {
         var docMode = isDocRef(refOrQuery);
         var path = docMode ? refOrQuery.path : resolveToQuery(refOrQuery).base.path;
@@ -323,13 +413,14 @@
             p.then(function (snap) { if (active) onNext(snap); })
              .catch(function (e) {
                  if (onError) onError(e);
-                 else console.error('[husna-supabase] onSnapshot error:', e);
+                 else console.error('[Husna DB] onSnapshot error:', path, e);
              });
         }
 
-        fetchAndEmit();
+        fetchAndEmit(); // fetch awal
 
-        var chanKey = 'rt_' + path.replace(/[^a-zA-Z0-9]/g, '_') + '_' + Date.now();
+        // Subscribe realtime changes
+        var chanKey = 'rt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
         var channel = sb.channel(chanKey)
             .on('postgres_changes', {
                 event: '*',
@@ -337,11 +428,7 @@
                 table: 'documents',
                 filter: 'collection_path=eq.' + path
             }, function () { fetchAndEmit(); })
-            .subscribe(function (status) {
-                if (status === 'CHANNEL_ERROR') {
-                    console.warn('[husna-supabase] Realtime channel error pada:', path);
-                }
-            });
+            .subscribe();
 
         return function unsubscribe() {
             active = false;
@@ -349,7 +436,7 @@
         };
     }
 
-    // ---------- Operasi tulis ----------
+    // ── Operasi tulis ─────────────────────────────────────────────
     function addDoc(ref, data) {
         var id = genId();
         var processed = processData(data, null);
@@ -366,72 +453,56 @@
 
     function setDoc(ref, data, options) {
         var merge = !!(options && options.merge);
-        if (merge) {
-            return sb.from('documents')
-                .select('data')
-                .eq('collection_path', ref.path)
-                .eq('doc_id', ref.id)
-                .maybeSingle()
-                .then(function (res) {
-                    if (res.error) throw res.error;
-                    var existing = (res.data && res.data.data) ? res.data.data : {};
-                    var processed = processData(data, existing);
-                    return sb.from('documents').upsert({
-                        collection_path: ref.path,
-                        doc_id: ref.id,
-                        data: processed,
-                        updated_at: nowIso()
-                    }, { onConflict: 'collection_path,doc_id' });
-                })
-                .then(function (res) { if (res && res.error) throw res.error; });
-        }
-        var processed = processData(data, null);
-        return sb.from('documents').upsert({
-            collection_path: ref.path,
-            doc_id: ref.id,
-            data: processed,
-            updated_at: nowIso()
-        }, { onConflict: 'collection_path,doc_id' }).then(function (res) {
-            if (res.error) throw res.error;
-        });
+        var doUpsert = function (base) {
+            var processed = processData(data, base || null);
+            return sb.from('documents').upsert({
+                collection_path: ref.path,
+                doc_id: ref.id,
+                data: processed,
+                updated_at: nowIso()
+            }, { onConflict: 'collection_path,doc_id' }).then(function (res) {
+                if (res.error) throw res.error;
+            });
+        };
+        if (!merge) return doUpsert(null);
+        return sb.from('documents')
+            .select('data').eq('collection_path', ref.path).eq('doc_id', ref.id).maybeSingle()
+            .then(function (res) {
+                if (res.error) throw res.error;
+                return doUpsert(res.data ? res.data.data : {});
+            });
     }
 
     function updateDoc(ref, data) {
         return sb.from('documents')
-            .select('data')
-            .eq('collection_path', ref.path)
-            .eq('doc_id', ref.id)
-            .maybeSingle()
+            .select('data').eq('collection_path', ref.path).eq('doc_id', ref.id).maybeSingle()
             .then(function (res) {
                 if (res.error) throw res.error;
-                if (!res.data) throw new Error('[husna-supabase] Dokumen tidak ditemukan: ' + ref.path + '/' + ref.id);
+                if (!res.data) throw new Error('Dokumen tidak ditemukan: ' + ref.path + '/' + ref.id);
                 var processed = processData(data, res.data.data);
                 return sb.from('documents')
                     .update({ data: processed, updated_at: nowIso() })
-                    .eq('collection_path', ref.path)
-                    .eq('doc_id', ref.id);
+                    .eq('collection_path', ref.path).eq('doc_id', ref.id);
             })
             .then(function (res) { if (res && res.error) throw res.error; });
     }
 
     function deleteDoc(ref) {
         return sb.from('documents')
-            .delete()
-            .eq('collection_path', ref.path)
-            .eq('doc_id', ref.id)
+            .delete().eq('collection_path', ref.path).eq('doc_id', ref.id)
             .then(function (res) { if (res.error) throw res.error; });
     }
 
     function writeBatch() {
         var ops = [];
         var api = {
-            set: function (ref, data, options) { ops.push({ type: 'set', ref: ref, data: data, options: options }); return api; },
-            update: function (ref, data) { ops.push({ type: 'update', ref: ref, data: data }); return api; },
-            delete: function (ref) { ops.push({ type: 'delete', ref: ref }); return api; },
+            set:    function (r, d, o) { ops.push({ type:'set',    ref:r, data:d, options:o }); return api; },
+            update: function (r, d)    { ops.push({ type:'update', ref:r, data:d          }); return api; },
+            delete: function (r)       { ops.push({ type:'delete', ref:r                  }); return api; },
             commit: function () {
-                return ops.reduce(function (promise, op) {
-                    return promise.then(function () {
-                        if (op.type === 'set') return setDoc(op.ref, op.data, op.options);
+                return ops.reduce(function (p, op) {
+                    return p.then(function () {
+                        if (op.type === 'set')    return setDoc(op.ref, op.data, op.options);
                         if (op.type === 'update') return updateDoc(op.ref, op.data);
                         if (op.type === 'delete') return deleteDoc(op.ref);
                     });
@@ -441,86 +512,62 @@
         return api;
     }
 
-    // ---------- Auth via Supabase ----------
-    function _localFallbackUser() {
+    // ── Auth ──────────────────────────────────────────────────────
+    // Tidak menggunakan Supabase Auth — anon key sudah cukup untuk
+    // akses data. Kita buat "user lokal" sederhana untuk kompatibilitas
+    // dengan kode React yang menunggu onAuthStateChanged.
+    function _localUser() {
+        var uid;
         try {
-            var uid = localStorage.getItem('husna_supabase_uid');
+            uid = localStorage.getItem('husna_uid');
             if (!uid) {
                 uid = 'anon_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
-                localStorage.setItem('husna_supabase_uid', uid);
+                localStorage.setItem('husna_uid', uid);
             }
-            return { uid: uid, id: uid, isAnonymous: true };
-        } catch (e) {
-            return { uid: 'anon_local', id: 'anon_local', isAnonymous: true };
-        }
+        } catch (e) { uid = 'anon_local'; }
+        return { uid: uid, id: uid, isAnonymous: true };
     }
 
+    var _user = _localUser();
+
+    // Langsung kembalikan user tanpa perlu call Supabase Auth
     function signInAnonymously() {
-        return sb.auth.signInAnonymously()
-            .then(function (res) {
-                if (res.error) {
-                    console.warn('[husna-supabase] signInAnonymously error, pakai fallback uid:', res.error.message);
-                    return { user: _localFallbackUser() };
-                }
-                return { user: res.data.user };
-            })
-            .catch(function (e) {
-                console.warn('[husna-supabase] signInAnonymously exception, pakai fallback uid:', e.message);
-                return { user: _localFallbackUser() };
-            });
+        return Promise.resolve({ user: _user });
     }
 
     function signInWithCustomToken() {
-        return signInAnonymously();
+        return Promise.resolve({ user: _user });
     }
 
     function onAuthStateChanged(_auth, callback) {
-        sb.auth.getSession().then(function (res) {
-            if (res.data && res.data.session && res.data.session.user) {
-                callback(res.data.session.user);
-            } else {
-                signInAnonymously().then(function (r) { callback(r.user); });
-            }
-        }).catch(function () {
-            callback(_localFallbackUser());
-        });
-
-        var sub = sb.auth.onAuthStateChange(function (event, session) {
-            if (session && session.user) {
-                callback(session.user);
-            }
-        });
-
-        return function unsubscribe() {
-            if (sub && sub.data && sub.data.subscription) {
-                sub.data.subscription.unsubscribe();
-            }
-        };
+        // Panggil callback segera (mirip implementasi lokal asli)
+        setTimeout(function () { callback(_user); }, 0);
+        return function unsubscribe() {};
     }
 
-    // ---------- Ekspos ke window (nama sama persis seperti versi lokal) ----------
-    window.db = { __supabaseDb: true };
-    window.auth = { __supabaseAuth: true };
-    window.signInAnonymously = signInAnonymously;
+    // ── Ekspos ke window ──────────────────────────────────────────
+    window.db              = { __supabaseDb: true };
+    window.auth            = { __supabaseAuth: true };
+    window.signInAnonymously   = signInAnonymously;
     window.signInWithCustomToken = signInWithCustomToken;
-    window.onAuthStateChanged = onAuthStateChanged;
-    window.collection = collection;
-    window.addDoc = addDoc;
-    window.updateDoc = updateDoc;
-    window.deleteDoc = deleteDoc;
-    window.setDoc = setDoc;
-    window.getDoc = getDoc;
-    window.getDocs = getDocs;
-    window.doc = doc;
-    window.onSnapshot = onSnapshot;
+    window.onAuthStateChanged  = onAuthStateChanged;
+    window.collection      = collection;
+    window.addDoc          = addDoc;
+    window.updateDoc       = updateDoc;
+    window.deleteDoc       = deleteDoc;
+    window.setDoc          = setDoc;
+    window.getDoc          = getDoc;
+    window.getDocs         = getDocs;
+    window.doc             = doc;
+    window.onSnapshot      = onSnapshot;
     window.serverTimestamp = serverTimestamp;
-    window.writeBatch = writeBatch;
-    window.query = query;
-    window.orderBy = orderBy;
-    window.where = where;
-    window.increment = increment;
-    window.limit = limit;
-    window.appId = 'default-app-id';
+    window.writeBatch      = writeBatch;
+    window.query           = query;
+    window.orderBy         = orderBy;
+    window.where           = where;
+    window.increment       = increment;
+    window.limit           = limit;
+    window.appId           = 'default-app-id';
     window.initialAuthToken = null;
 })();
     </script>
