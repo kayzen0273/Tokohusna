@@ -142,18 +142,10 @@
 
     function hydrateValue(x) {
         if (x === null || x === undefined) return x;
-        if (typeof x === 'string' && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(x)) {
-            var ms = new Date(x).getTime();
-            if (!isNaN(ms)) {
-                return {
-                    seconds: Math.floor(ms / 1000),
-                    nanoseconds: (ms % 1000) * 1e6,
-                    toDate: function () { return new Date(ms); },
-                    toMillis: function () { return ms; },
-                    isEqual: function (o) { return !!(o && typeof o.toMillis === 'function' && o.toMillis() === ms); }
-                };
-            }
-        }
+        // ISO string: biarkan tetap sebagai string.
+        // Kode React sudah handle pattern: val?.toDate ? val.toDate() : new Date(val)
+        // Jika dikonversi ke objek {seconds,...}, maka new Date(val) → "Invalid Date"
+        if (typeof x === 'string') return x;
         if (typeof x !== 'object') return x;
         if (Array.isArray(x)) return x.map(hydrateValue);
         var out = {};
@@ -1252,7 +1244,7 @@
                 // if (settings.storeHeader3 && (!headers.length)) { encoder.text(settings.storeHeader3).newline(); }
                 headers.forEach(h => { if(h && h.trim()) encoder.text(h).newline(); });
                 
-                const receiptDate = receipt.date.seconds ? receipt.date.toDate() : new Date(receipt.date);
+                const receiptDate = receipt.date?.toDate ? receipt.date.toDate() : (receipt.date ? new Date(receipt.date) : new Date());
                 const hariIndo = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][receiptDate.getDay()];
                 encoder.line().alignLeft()
                     .text(`Tgl: ${hariIndo}, ${receiptDate.toLocaleDateString('id-ID')} ${receiptDate.toLocaleTimeString('id-ID')}`)
@@ -7266,7 +7258,7 @@
                     const all = snapshot.docs.map(doc => {
                         const data = doc.data();
                         // Konversi updatedAt Firestore Timestamp ke ms
-                        const updatedAtMs = data.updatedAt?.toMillis?.() || data.updatedAt?.seconds * 1000 || 0;
+                        const updatedAtMs = data.updatedAt?.toMillis?.() || (data.updatedAt?.seconds ? data.updatedAt.seconds * 1000 : (data.updatedAt ? new Date(data.updatedAt).getTime() : 0)) || 0;
                         return { id: doc.id, ...data, _updatedAtMs: updatedAtMs };
                     });
 
@@ -8316,7 +8308,7 @@
                                             <div style={{flex:1,display:'flex',flexDirection:'column',gap:'0px'}}>
                                                 <div style={{fontSize:'13.5px',fontWeight:800,color:'#111'}}>{formatRupiah(pending.total)}</div>
                                                 <div style={{fontSize:'11.5px',fontWeight:600,color:'#444'}}>
-                                                    {pending.items.length} barang • {new Date(pending.date || pending.savedAt).toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit'})}
+                                                    {pending.items.length} barang • {(() => { const raw = pending.date || pending.savedAt; if (!raw) return '--:--'; const d = raw?.toDate ? raw.toDate() : new Date(raw); return isNaN(d.getTime()) ? '--:--' : d.toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit'}); })()}
                                                 </div>
                                                 <div style={{fontSize:'11.5px',fontWeight:600,color:'#555'}}>{pending.cashierName || 'Kasir'}</div>
                                             </div>
@@ -10019,7 +10011,7 @@
             const dailyTransactions = useMemo(() => {
                 const { from, to } = getDateRanges();
                 return transactions.filter(tx => {
-                    const txDate = tx.date.seconds ? tx.date.toDate() : new Date(tx.date);
+                    const txDate = tx.date?.toDate ? tx.date.toDate() : (tx.date ? new Date(tx.date) : new Date(0));
                     if (filterMode === 'today') return isSameDay(txDate, from);
                     if (filterMode === 'specific') {
                         const fromDay = new Date(from); fromDay.setHours(0,0,0,0);
@@ -10057,8 +10049,8 @@
                 if (filterPayment.length > 0) { data = data.filter(tx => filterPayment.includes(tx.paymentMethod || 'tunai')); }
                 if (filterTipe !== 'all') { data = data.filter(tx => (tx.tipeTransaksi || 'Harga normal') === filterTipe); }
                 data.sort((a, b) => {
-                    const dateA = a.date.seconds ? a.date.toDate() : new Date(a.date);
-                    const dateB = b.date.seconds ? b.date.toDate() : new Date(b.date);
+                    const dateA = a.date?.toDate ? a.date.toDate() : (a.date ? new Date(a.date) : new Date(0));
+                    const dateB = b.date?.toDate ? b.date.toDate() : (b.date ? new Date(b.date) : new Date(0));
                     switch (sortOrder) { case 'oldest': return dateA - dateB; case 'highest': return b.total - a.total; case 'lowest': return a.total - b.total; case 'newest': default: return dateB - dateA; }
                 });
                 return data;
@@ -10735,7 +10727,7 @@
                                 <div className="flex items-start gap-2">
                                     <span className="text-xs font-bold text-slate-400 mt-0.5">{(histPage - 1) * HIST_PAGE_SIZE + idx + 1}</span>
                                     <div>
-                                        <p className="text-xs font-bold text-teal-600">{(() => { const d = new Date(tx.date.seconds ? tx.date.toDate() : tx.date); return d.toLocaleDateString('en-GB', {year:'numeric', month:'short', day:'numeric'}) + ', ' + d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) + ' WIB'; })()}</p>
+                                        <p className="text-xs font-bold text-teal-600">{(() => { const raw = tx.date; const d = raw?.toDate ? raw.toDate() : (raw ? new Date(raw) : new Date(0)); return isNaN(d.getTime()) ? '-' : d.toLocaleDateString('en-GB', {year:'numeric', month:'short', day:'numeric'}) + ', ' + d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) + ' WIB'; })()}</p>
                                         <p className={`text-sm font-black ${tx.status === 'returned' ? 'text-red-500 line-through' : 'text-teal-600'}`}>#{tx.id?.slice(-10).toUpperCase()}</p>
                                     </div>
                                 </div>
@@ -12388,7 +12380,7 @@
                     const toISO = (d) => {
                         if (!d) return '';
                         if (d?.toDate) return d.toDate().toISOString();
-                        if (d?.seconds) return new Date(d.seconds * 1000).toISOString();
+                        if (d?.toDate) return d.toDate().toISOString();
                         return String(d);
                     };
                     const all = [...keluar, ...masuk, ...opname]
@@ -12662,7 +12654,7 @@
                                                         try {
                                                             let d;
                                                             if (h.date?.toDate) d = h.date.toDate();
-                                                            else if (h.date?.seconds) d = new Date(h.date.seconds * 1000);
+                                                            else if (h.date?.toDate) d = h.date.toDate(); else if (h.date?.seconds) d = new Date(h.date.seconds * 1000);
                                                             else d = new Date(h.date);
                                                             return d.toLocaleDateString('id-ID', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) + ' WIB';
                                                         } catch { return String(h.date); }
@@ -17999,7 +17991,7 @@
 
             const formatDate = (ts) => {
                 if (!ts) return '-';
-                const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
+                const d = ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : new Date());
                 return d.toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
             };
 
@@ -18474,7 +18466,7 @@
                         return transactions.filter(tx => {
                             if (tx.status === 'returned') return false;
                             if (currentProfile?.id && currentProfile.id !== 'all_stores' && tx.storeId && tx.storeId !== currentProfile.id) return false;
-                            const txDate = tx.date?.seconds ? new Date(tx.date.seconds * 1000) : new Date(tx.date);
+                            const txDate = tx.date?.toDate ? tx.date.toDate() : (tx.date ? new Date(tx.date) : new Date(0));
                             if (filterMode === '7d') { const d = new Date(now); d.setDate(d.getDate() - 6); d.setHours(0,0,0,0); return txDate >= d; }
                             if (filterMode === '30d') { const d = new Date(now); d.setDate(d.getDate() - 29); d.setHours(0,0,0,0); return txDate >= d; }
                             if (filterMode === 'this_month') return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
@@ -18492,7 +18484,7 @@
                         let totalOmzet = 0, totalTx = 0;
 
                         filteredTx.forEach(tx => {
-                            const txDate = tx.date?.seconds ? new Date(tx.date.seconds * 1000) : new Date(tx.date);
+                            const txDate = tx.date?.toDate ? tx.date.toDate() : (tx.date ? new Date(tx.date) : new Date(0));
                             totalTx++;
                             const dayKey = txDate.toISOString().split('T')[0];
                             const dayLabel = txDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
@@ -18949,7 +18941,7 @@
                         return transactions.filter(tx => {
                             if (tx.status === 'returned') return false;
                             if (currentProfile?.id && currentProfile.id !== 'all_stores' && tx.storeId && tx.storeId !== currentProfile.id) return false;
-                            const txDate = tx.date?.seconds ? new Date(tx.date.seconds * 1000) : new Date(tx.date);
+                            const txDate = tx.date?.toDate ? tx.date.toDate() : (tx.date ? new Date(tx.date) : new Date(0));
                             if (filterMode === 'today') return txDate.toDateString() === now.toDateString();
                             if (filterMode === 'this_week') { const sow = new Date(now); sow.setDate(now.getDate() - now.getDay()); sow.setHours(0,0,0,0); return txDate >= sow; }
                             if (filterMode === 'this_month') return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
@@ -19284,7 +19276,7 @@
                         return transactions.filter(tx => {
                             if (tx.status === 'returned') return false;
                             if (currentProfile?.id && currentProfile.id !== 'all_stores' && tx.storeId && tx.storeId !== currentProfile.id) return false;
-                            const txDate = tx.date?.seconds ? new Date(tx.date.seconds * 1000) : new Date(tx.date);
+                            const txDate = tx.date?.toDate ? tx.date.toDate() : (tx.date ? new Date(tx.date) : new Date(0));
                             if (filterMode === 'today') {
                                 return txDate.toDateString() === now.toDateString();
                             } else if (filterMode === 'this_week') {
@@ -20078,7 +20070,7 @@
                             </div> 
                             <div className="border-b-2 border-dashed border-gray-300 my-2"></div>
                             {(() => {
-                                const rd = receiptToPrint.date.seconds ? receiptToPrint.date.toDate() : new Date(receiptToPrint.date);
+                                const rd = receiptToPrint.date?.toDate ? receiptToPrint.date.toDate() : (receiptToPrint.date ? new Date(receiptToPrint.date) : new Date());
                                 const hariReceipt = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][rd.getDay()];
                                 return (
                                     <>
