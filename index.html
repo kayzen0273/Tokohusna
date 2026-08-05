@@ -69,53 +69,196 @@
     <!-- ExcelJS for Excel Export with Full Styling Support -->
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
 
-    <!-- Firebase SDK (Module) -->
+    <!-- ============================================================
+         SUPABASE SHIM (pengganti Firebase SDK)
+         Menyediakan ulang seluruh fungsi window.* yang dulu berasal dari
+         Firebase (collection, doc, addDoc, onSnapshot, dst) tapi di
+         baliknya memanggil Supabase. Kode aplikasi di bawah baris ini
+         TIDAK PERLU DIUBAH SAMA SEKALI.
+         ============================================================ -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, writeBatch, query, orderBy, increment, limit, setDoc, getDoc, getDocs, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-        // Konfigurasi dari User
-        const userConfig = {
-            apiKey: "AIzaSyAKhe3ILdMTN7Dn9Ao3MqlzW3s5hHUDB_c",
-            authDomain: "toko-husna-c6415.firebaseapp.com",
-            projectId: "toko-husna-c6415",
-            storageBucket: "toko-husna-c6415.firebasestorage.app",
-            messagingSenderId: "171239564619",
-            appId: "1:171239564619:web:29972d886bd39f1559f4ce",
-            measurementId: "G-4BKNYL5KFC"
+        // ------------------------------------------------------------
+        // ISI DENGAN KREDENSIAL PROJECT SUPABASE ANDA
+        // Dashboard Supabase > Project Settings > API
+        // ------------------------------------------------------------
+        const SUPABASE_URL = "https://qunnhqmteenjrufiosuw.supabase.co";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1bm5ocW10ZWVuanJ1Zmlvc3V3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5NDQwNDUsImV4cCI6MjEwMTUyMDA0NX0.BFU73Er2oS7c82MlQKa0gdSswilU3cID9LH1q_2i-8A";
+
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const TABLE = "fs_documents";
+        // Diperlukan oleh handlePageHide (sendBeacon/fetch-keepalive raw REST call saat tab ditutup)
+        window.__supabaseUrl = SUPABASE_URL;
+        window.__supabaseAnonKey = SUPABASE_ANON_KEY;
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        window.appId = appId;
+        window.db = { __type: 'db' };
+
+        // ---------------- helpers ----------------
+        const pathKey = (segs) => segs.join('/');
+        const genId = () => (window.crypto?.randomUUID ? window.crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+
+        // ---------------- sentinels ----------------
+        window.serverTimestamp = () => ({ __op: 'timestamp' });
+        window.increment = (n) => ({ __op: 'increment', value: n });
+
+        // ---------------- refs ----------------
+        window.collection = (dbRef, ...segs) => {
+            if (!dbRef || dbRef.__type !== 'db') throw new Error('collection(): argumen pertama harus window.db');
+            if (segs.length % 2 === 0) throw new Error('collection(): jumlah path harus ganjil');
+            return { __type: 'collection', segments: segs, path: pathKey(segs) };
         };
 
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : userConfig;
-        
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        window.doc = (refOrDb, ...segs) => {
+            if (refOrDb && refOrDb.__type === 'collection') {
+                const id = segs.length ? segs[0] : genId();
+                return { __type: 'doc', path: refOrDb.path, id };
+            }
+            if (refOrDb && refOrDb.__type === 'db') {
+                if (segs.length % 2 !== 0) throw new Error('doc(): jumlah path harus genap');
+                const id = segs[segs.length - 1];
+                const collSegs = segs.slice(0, -1);
+                return { __type: 'doc', path: pathKey(collSegs), id };
+            }
+            throw new Error('doc(): argumen pertama tidak dikenali');
+        };
 
-        // Expose ke window
-        window.db = db;
-        window.auth = auth;
-        window.signInAnonymously = signInAnonymously;
-        window.signInWithCustomToken = signInWithCustomToken;
-        window.onAuthStateChanged = onAuthStateChanged;
-        window.collection = collection;
-        window.addDoc = addDoc;
-        window.updateDoc = updateDoc;
-        window.deleteDoc = deleteDoc;
-        window.setDoc = setDoc;
-        window.getDoc = getDoc;
-        window.getDocs = getDocs;
-        window.doc = doc;
-        window.onSnapshot = onSnapshot;
-        window.serverTimestamp = serverTimestamp;
-        window.writeBatch = writeBatch;
-        window.query = query;
-        window.orderBy = orderBy;
-        window.where = where;
-        window.increment = increment; 
-        window.limit = limit;
-        window.appId = appId;
+        // ---------------- query builder ----------------
+        window.where = (field, op, value) => ({ __type: 'where', field, op, value });
+        window.orderBy = (field, dir = 'asc') => ({ __type: 'orderBy', field, dir });
+        window.limit = (n) => ({ __type: 'limit', n });
+
+        window.query = (base, ...constraints) => {
+            if (base.__type === 'query') {
+                return { __type: 'query', collectionRef: base.collectionRef, constraints: [...base.constraints, ...constraints] };
+            }
+            return { __type: 'query', collectionRef: base, constraints };
+        };
+
+        function buildSupabaseQuery(refOrQuery) {
+            const isQuery = refOrQuery.__type === 'query';
+            const coll = isQuery ? refOrQuery.collectionRef : refOrQuery;
+            let q = supabase.from(TABLE).select('*').eq('path_key', coll.path);
+            const constraints = isQuery ? refOrQuery.constraints : [];
+            for (const c of constraints) {
+                if (c.__type === 'where') {
+                    if (c.op !== '==') throw new Error(`Operator where '${c.op}' belum didukung shim ini`);
+                    q = q.eq(`data->>${c.field}`, String(c.value));
+                } else if (c.__type === 'orderBy') {
+                    q = q.order(`data->>${c.field}`, { ascending: c.dir !== 'desc' });
+                } else if (c.__type === 'limit') {
+                    q = q.limit(c.n);
+                }
+            }
+            return q;
+        }
+
+        const rowToDocSnap = (row) => ({
+            id: row.id,
+            exists: () => true,
+            data: () => row.data,
+            ref: { __type: 'doc', path: row.path_key, id: row.id }
+        });
+
+        // ---------------- reads ----------------
+        window.getDoc = async (docRef) => {
+            const { data, error } = await supabase.from(TABLE).select('*').eq('path_key', docRef.path).eq('id', docRef.id).maybeSingle();
+            if (error) throw error;
+            if (!data) return { id: docRef.id, exists: () => false, data: () => undefined };
+            return rowToDocSnap(data);
+        };
+
+        window.getDocs = async (refOrQuery) => {
+            const { data, error } = await buildSupabaseQuery(refOrQuery);
+            if (error) throw error;
+            const docs = (data || []).map(rowToDocSnap);
+            return { docs, size: docs.length, empty: docs.length === 0, forEach: (fn) => docs.forEach(fn) };
+        };
+
+        // ---------------- writes ----------------
+        window.addDoc = async (collRef, data) => {
+            const id = genId();
+            const { error } = await supabase.rpc('fs_write', { p_path: collRef.path, p_id: id, p_fields: data, p_mode: 'set', p_must_exist: false });
+            if (error) throw error;
+            return { id, path: collRef.path };
+        };
+
+        window.setDoc = async (docRef, data, options) => {
+            const mode = options?.merge ? 'merge' : 'set';
+            const { error } = await supabase.rpc('fs_write', { p_path: docRef.path, p_id: docRef.id, p_fields: data, p_mode: mode, p_must_exist: false });
+            if (error) throw error;
+        };
+
+        window.updateDoc = async (docRef, data) => {
+            const { error } = await supabase.rpc('fs_write', { p_path: docRef.path, p_id: docRef.id, p_fields: data, p_mode: 'update', p_must_exist: true });
+            if (error) throw error;
+        };
+
+        window.deleteDoc = async (docRef) => {
+            const { error } = await supabase.rpc('fs_write', { p_path: docRef.path, p_id: docRef.id, p_fields: null, p_mode: 'delete', p_must_exist: false });
+            if (error) throw error;
+        };
+
+        // ---------------- writeBatch ----------------
+        window.writeBatch = () => {
+            const ops = [];
+            return {
+                set(docRef, data, options) { ops.push({ path: docRef.path, id: docRef.id, fields: data, mode: options?.merge ? 'merge' : 'set', mustExist: false }); return this; },
+                update(docRef, data) { ops.push({ path: docRef.path, id: docRef.id, fields: data, mode: 'update', mustExist: true }); return this; },
+                delete(docRef) { ops.push({ path: docRef.path, id: docRef.id, fields: null, mode: 'delete', mustExist: false }); return this; },
+                async commit() {
+                    const { error } = await supabase.rpc('fs_batch_write', { p_ops: ops });
+                    if (error) throw error;
+                }
+            };
+        };
+
+        // ---------------- onSnapshot (realtime) ----------------
+        window.onSnapshot = (refOrQuery, onNext, onError) => {
+            let cancelled = false;
+            const isDoc = refOrQuery.__type === 'doc';
+            const collPath = isDoc ? refOrQuery.path : (refOrQuery.__type === 'query' ? refOrQuery.collectionRef.path : refOrQuery.path);
+
+            const emit = async () => {
+                try {
+                    const snap = isDoc ? await window.getDoc(refOrQuery) : await window.getDocs(refOrQuery);
+                    if (!cancelled) onNext(snap);
+                } catch (e) {
+                    if (onError) onError(e); else console.error('[onSnapshot]', e);
+                }
+            };
+
+            emit();
+
+            const channel = supabase.channel(`rt:${collPath}:${Math.random().toString(36).slice(2)}`)
+                .on('postgres_changes', { event: '*', schema: 'public', table: TABLE, filter: `path_key=eq.${collPath}` }, () => emit())
+                .subscribe();
+
+            return () => { cancelled = true; supabase.removeChannel(channel); };
+        };
+
+        // ---------------- auth ----------------
+        const mapUser = (su) => su ? ({ uid: su.id, email: su.email || null, isAnonymous: !su.email, ...su }) : null;
+
+        window.signInAnonymously = async () => {
+            const { data, error } = await supabase.auth.signInAnonymously();
+            if (error) throw error;
+            return { user: mapUser(data.user) };
+        };
+
+        // __initial_auth_token hanya ada di sandbox preview AI Studio, tidak pernah
+        // muncul di deployment nyata — fallback ke anonymous agar tetap konsisten.
+        window.signInWithCustomToken = async () => window.signInAnonymously();
+
+        window.onAuthStateChanged = (authArg, callback) => {
+            supabase.auth.getSession().then(({ data }) => callback(mapUser(data.session?.user)));
+            const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => callback(mapUser(session?.user)));
+            return () => sub.subscription.unsubscribe();
+        };
+
+        window.auth = { __type: 'auth' };
         window.initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
     </script>
 
@@ -7276,12 +7419,27 @@
                     const snap = autoSaveSnap.current;
                     if (snap?.isSessionActive && snap?.activeCartId) {
                         try {
-                            const projectId = window.db?.app?.options?.projectId;
                             const cartId = snap.activeCartId;
-                            if (projectId && cartId) {
-                                const url = 'https://firestore.googleapis.com/v1/projects/' + projectId + '/databases/(default)/documents/artifacts/' + window.appId + '/public/data/active_carts/' + cartId + '?updateMask.fieldPaths=isActive';
-                                const body = JSON.stringify({ fields: { isActive: { booleanValue: false } } });
-                                navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
+                            const supaUrl = window.__supabaseUrl;
+                            const supaKey = window.__supabaseAnonKey;
+                            if (supaUrl && supaKey && cartId) {
+                                // Pengganti sendBeacon ke Firestore REST API: panggil RPC fs_write
+                                // di Supabase lewat fetch keepalive (sendBeacon tidak bisa kirim header
+                                // apikey/Authorization yang dibutuhkan Supabase).
+                                const url = supaUrl + '/rest/v1/rpc/fs_write';
+                                const body = JSON.stringify({
+                                    p_path: 'artifacts/' + window.appId + '/public/data/active_carts',
+                                    p_id: cartId,
+                                    p_fields: { isActive: false },
+                                    p_mode: 'update',
+                                    p_must_exist: false
+                                });
+                                fetch(url, {
+                                    method: 'POST',
+                                    keepalive: true,
+                                    headers: { 'Content-Type': 'application/json', 'apikey': supaKey, 'Authorization': 'Bearer ' + supaKey },
+                                    body
+                                }).catch(() => {});
                             }
                         } catch(e) { /* silent - best effort */ }
                     }
@@ -11495,7 +11653,7 @@
                     <div className="bg-gradient-to-r from-night-900 to-sky-900 rounded-3xl p-5 md:p-6 text-white relative overflow-hidden shadow-2xl border border-slate-700 group">
                         <div className="absolute right-0 top-0 w-48 h-48 bg-gold-400 opacity-10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
                         <div className="relative z-10 flex items-center justify-between">
-                            <div><h3 className="font-bold text-xl md:text-2xl text-sky-300 mb-1 flex items-center gap-2"><Icon name="cash-register" className="text-sky-400" /> Sistem Kasir Husna</h3><p className="text-xs md:text-sm text-slate-300 font-medium opacity-90">Kelola toko lebih cepat, lebih mudah, lebih akurat ⚡</p><div className="mt-3 inline-flex items-center gap-2 bg-green-500/20 px-3 py-1 rounded-full backdrop-blur-sm border border-green-500/30"><div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div><span className="text-[10px] font-bold tracking-wide text-green-300">ONLINE (FIREBASE)</span></div></div>
+                            <div><h3 className="font-bold text-xl md:text-2xl text-sky-300 mb-1 flex items-center gap-2"><Icon name="cash-register" className="text-sky-400" /> Sistem Kasir Husna</h3><p className="text-xs md:text-sm text-slate-300 font-medium opacity-90">Kelola toko lebih cepat, lebih mudah, lebih akurat ⚡</p><div className="mt-3 inline-flex items-center gap-2 bg-green-500/20 px-3 py-1 rounded-full backdrop-blur-sm border border-green-500/30"><div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div><span className="text-[10px] font-bold tracking-wide text-green-300">ONLINE (SUPABASE)</span></div></div>
                             <div className="text-4xl text-sky-400/80 animate-pulse"><Icon name="store" /></div>
                         </div>
                     </div>
