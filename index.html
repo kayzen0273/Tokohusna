@@ -69,54 +69,511 @@
     <!-- ExcelJS for Excel Export with Full Styling Support -->
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
 
-    <!-- Firebase SDK (Module) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, writeBatch, query, orderBy, increment, limit, setDoc, getDoc, getDocs, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    <!-- Supabase SDK (replaces Firebase; see supabase_migration.sql for the matching schema) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+/* ============================================================================
+ * Toko Husna Kasir — Firebase → Supabase compatibility shim
+ * ============================================================================
+ * This file re-implements every `window.X` Firestore function the rest of the
+ * app calls (collection, doc, addDoc, updateDoc, deleteDoc, setDoc, getDoc,
+ * getDocs, onSnapshot, query, where, orderBy, limit, increment, serverTimestamp,
+ * writeBatch, plus the auth functions) on top of Supabase — so NOTHING else in
+ * the app needs to change. Business logic below this file calls the exact same
+ * `window.X(...)` functions it always did; only what's behind them changed.
+ * ==========================================================================*/
+(function () {
+  'use strict';
 
-        // Konfigurasi dari User
-        const userConfig = {
-            apiKey: "AIzaSyAKhe3ILdMTN7Dn9Ao3MqlzW3s5hHUDB_c",
-            authDomain: "toko-husna-c6415.firebaseapp.com",
-            projectId: "toko-husna-c6415",
-            storageBucket: "toko-husna-c6415.firebasestorage.app",
-            messagingSenderId: "171239564619",
-            appId: "1:171239564619:web:29972d886bd39f1559f4ce",
-            measurementId: "G-4BKNYL5KFC"
-        };
+  // ── Configuration ─────────────────────────────────────────────────────────
+  var SUPABASE_URL = 'https://kusetiuorizpufixfwbs.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt1c2V0aXVvcml6cHVmaXhmd2JzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5NjMzOTQsImV4cCI6MjEwMTUzOTM5NH0.VmuEY9-EGugF648ziFcW-L8QQhp7QRW3t6JUdDsmGmk';
 
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : userConfig;
-        
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+  // Exposed for the one spot in the app (tab-close beacon) that needs to hit
+  // the REST endpoint directly, since navigator.sendBeacon can't use the SDK.
+  window.SUPABASE_URL = SUPABASE_URL;
+  window.SUPABASE_ANON_KEY = SUPABASE_ANON_KEY;
 
-        // Expose ke window
-        window.db = db;
-        window.auth = auth;
-        window.signInAnonymously = signInAnonymously;
-        window.signInWithCustomToken = signInWithCustomToken;
-        window.onAuthStateChanged = onAuthStateChanged;
-        window.collection = collection;
-        window.addDoc = addDoc;
-        window.updateDoc = updateDoc;
-        window.deleteDoc = deleteDoc;
-        window.setDoc = setDoc;
-        window.getDoc = getDoc;
-        window.getDocs = getDocs;
-        window.doc = doc;
-        window.onSnapshot = onSnapshot;
-        window.serverTimestamp = serverTimestamp;
-        window.writeBatch = writeBatch;
-        window.query = query;
-        window.orderBy = orderBy;
-        window.where = where;
-        window.increment = increment; 
-        window.limit = limit;
-        window.appId = appId;
-        window.initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+  if (typeof supabase === 'undefined' || !supabase.createClient) {
+    console.error('Supabase client library failed to load. Check your network/CDN access.');
+  }
+  var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false },
+  });
+  window.__sb = sb; // exposed for debugging in the console only
+
+  // ── ID generation (stand-in for Firestore's client-generated doc IDs) ─────
+  function generateId() {
+    // RFC4122-ish v4 UUID via Math.random. We don't rely on Web Crypto here
+    // because this app may be served over plain http:// on a local network
+    // (common for an in-store POS), where crypto.randomUUID is unavailable.
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      var r = (Math.random() * 16) | 0;
+      var v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
+  // ── Firestore collection name → Postgres table name ───────────────────────
+  var TABLE_MAP = {
+    active_carts: 'active_carts',
+    cashflow: 'cashflow',
+    catatan: 'catatan',
+    changelog: 'changelog',
+    config: 'config',
+    daily_revenue: 'daily_revenue',
+    dokter_list: 'dokter_list',
+    feedback: 'feedback',
+    inventory: 'inventory',
+    otp_reset: 'otp_reset',
+    paket_barang: 'paket_barang',
+    pasien_list: 'pasien_list',
+    pending_carts: 'pending_carts',
+    presence: 'presence',
+    priceHistory: 'price_history',
+    purchases: 'purchases',
+    settings: 'settings',
+    shift_absensi: 'shift_absensi',
+    shift_config: 'shift_config',
+    shift_jadwal: 'shift_jadwal',
+    shift_karyawan: 'shift_karyawan',
+    shift_lokasi: 'shift_lokasi',
+    stock_opname: 'stock_opname',
+    suppliers: 'suppliers',
+    system_codes: 'system_codes',
+    transactions: 'transactions',
+    transfer_barang: 'transfer_barang',
+    users: 'users',
+  };
+
+  // Field → real generated column, PER TABLE. Derived from an exhaustive audit
+  // of every where()/orderBy() call in the app. Anything not listed here falls
+  // back to querying the JSON path directly (data->>field), which PostgREST
+  // also supports, so unanticipated future fields still work correctly.
+  var FIELD_COLUMN_MAP = {
+    active_carts: { isActive: 'is_active_key', cashierName: 'cashier_name_key', storeId: 'store_id_key' },
+    transactions: { date: 'date_key', storeId: 'store_id_key' },
+    purchases: { date: 'date_key', storeId: 'store_id_key' },
+    suppliers: { name: 'name_key' },
+    cashflow: { date: 'date_key' },
+    daily_revenue: { date: 'date_key' },
+    pending_carts: { date: 'date_key' },
+    stock_opname: { status: 'status_key', profileId: 'profile_id_key', createdAt: 'created_at_key' },
+    price_history: { itemId: 'item_id_key' },
+    catatan: { createdAt: 'created_at_key' },
+    catatan_private: { createdAt: 'created_at_key' },
+    shift_karyawan: { createdAt: 'created_at_key' },
+    shift_lokasi: { createdAt: 'created_at_key' },
+    shift_absensi: { createdAt: 'created_at_key' },
+    transfer_barang: { createdAt: 'created_at_key' },
+    changelog: { position: 'position_key' },
+    users: { username: 'username_key', email: 'email_key' },
+  };
+
+  function resolveColumn(table, field) {
+    var m = FIELD_COLUMN_MAP[table];
+    if (m && m[field]) return m[field];
+    // Defensive fallback for any field we didn't anticipate: PostgREST natively
+    // supports querying/ordering by a JSON path expressed in the column name.
+    return 'data->>' + field;
+  }
+
+  // ── Path parsing: Firestore path segments → {table, id?, extraFilter?} ────
+  // Every path in this app is one of:
+  //   ['artifacts', appId, 'public', 'data', COLLECTION]            (collection)
+  //   ['artifacts', appId, 'public', 'data', COLLECTION, DOC_ID]     (doc)
+  //   ['artifacts', appId, 'users', UID, 'catatan']                 (private collection)
+  //   ['artifacts', appId, 'users', UID, 'catatan', DOC_ID]         (private doc)
+  function parseFullPath(segments) {
+    if (segments[2] === 'public' && segments[3] === 'data') {
+      var collName = segments[4];
+      var table = TABLE_MAP[collName] || collName;
+      if (segments.length <= 5) {
+        return { __type: 'collection', table: table, extraFilter: null };
+      }
+      return { __type: 'doc', table: table, id: segments[5], extraFilter: null };
+    }
+    if (segments[2] === 'users') {
+      var uid = segments[3];
+      var privColl = segments[4]; // always 'catatan' in this app
+      var privTable = privColl === 'catatan' ? 'catatan_private' : (TABLE_MAP[privColl] || privColl);
+      var extraFilter = { owner_uid: uid || 'anon' };
+      if (segments.length <= 5) {
+        return { __type: 'collection', table: privTable, extraFilter: extraFilter };
+      }
+      return { __type: 'doc', table: privTable, id: segments[5], extraFilter: extraFilter };
+    }
+    throw new Error('Unrecognized Firestore-style path: ' + segments.join('/'));
+  }
+
+  // ── Firestore-like sentinels: serverTimestamp() / increment() ─────────────
+  // serverTimestamp() is resolved immediately (client clock) into a concrete,
+  // tagged marker {"__ts": "<iso>"} that survives JSON transport as-is; the read
+  // side later unwraps "__ts" markers back into Timestamp-like objects (see
+  // FSTimestamp below) so `.toDate()/.seconds/.toMillis()` keep working exactly
+  // like real Firestore Timestamps, wherever the app still expects them.
+  //
+  // increment() is DELIBERATELY left unresolved here — it's sent to Postgres as
+  // {"__op":"increment","value":N} and resolved atomically server-side (see
+  // fs_merge_fields in the SQL migration), so concurrent cashiers updating
+  // stock never clobber each other the way a client-side read-modify-write would.
+  var SERVER_TIMESTAMP_MARKER = { __isServerTimestampSentinel: true };
+  window.serverTimestamp = function () { return SERVER_TIMESTAMP_MARKER; };
+  window.increment = function (n) { return { __op: 'increment', value: n }; };
+
+  function resolveWriteMarkers(value) {
+    if (value === SERVER_TIMESTAMP_MARKER) {
+      return { __ts: new Date().toISOString() };
+    }
+    if (value === null || value === undefined) return value;
+    if (Array.isArray(value)) return value.map(resolveWriteMarkers);
+    if (typeof value === 'object') {
+      if (value.__op === 'increment') return value; // pass through, resolved server-side
+      var out = {};
+      for (var k in value) if (Object.prototype.hasOwnProperty.call(value, k)) out[k] = resolveWriteMarkers(value[k]);
+      return out;
+    }
+    return value;
+  }
+
+  // ── Timestamp-like objects on read (mirrors Firestore's Timestamp class) ──
+  function FSTimestamp(iso) {
+    this._iso = iso;
+    var t = new Date(iso).getTime();
+    this._ms = isNaN(t) ? 0 : t;
+  }
+  FSTimestamp.prototype.toDate = function () { return new Date(this._ms); };
+  FSTimestamp.prototype.toMillis = function () { return this._ms; };
+  Object.defineProperty(FSTimestamp.prototype, 'seconds', { get: function () { return Math.floor(this._ms / 1000); } });
+  Object.defineProperty(FSTimestamp.prototype, 'nanoseconds', { get: function () { return (this._ms % 1000) * 1e6; } });
+  FSTimestamp.prototype.isEqual = function (other) { return other instanceof FSTimestamp && other._ms === this._ms; };
+  FSTimestamp.prototype.toString = function () { return new Date(this._ms).toString(); };
+
+  function isTimestampMarker(v) {
+    return v && typeof v === 'object' && !Array.isArray(v) &&
+      typeof v.__ts === 'string' && Object.keys(v).length === 1;
+  }
+
+  function unwrapTimestamps(value) {
+    if (value === null || value === undefined) return value;
+    if (Array.isArray(value)) return value.map(unwrapTimestamps);
+    if (typeof value === 'object') {
+      if (isTimestampMarker(value)) return new FSTimestamp(value.__ts);
+      var out = {};
+      for (var k in value) if (Object.prototype.hasOwnProperty.call(value, k)) out[k] = unwrapTimestamps(value[k]);
+      return out;
+    }
+    return value;
+  }
+
+  function rowToDocData(row) {
+    return unwrapTimestamps((row && row.data) || {});
+  }
+
+  // ── collection() / doc() ───────────────────────────────────────────────────
+  window.collection = function (db) {
+    var segments = Array.prototype.slice.call(arguments, 1);
+    var parsed = parseFullPath(segments);
+    if (parsed.__type !== 'collection') {
+      throw new Error('collection() path resolved to a document, not a collection: ' + segments.join('/'));
+    }
+    return parsed;
+  };
+
+  window.doc = function (refOrDb) {
+    var rest = Array.prototype.slice.call(arguments, 1);
+    if (refOrDb && refOrDb.__type === 'collection') {
+      var id = rest.length > 0 && rest[0] !== undefined ? rest[0] : generateId();
+      return { __type: 'doc', table: refOrDb.table, id: id, extraFilter: refOrDb.extraFilter };
+    }
+    // refOrDb === window.db: full path from root
+    var parsed = parseFullPath(rest);
+    if (parsed.__type === 'collection') {
+      return { __type: 'doc', table: parsed.table, id: generateId(), extraFilter: parsed.extraFilter };
+    }
+    return parsed;
+  };
+
+  // ── query() / where() / orderBy() / limit() ────────────────────────────────
+  window.where = function (field, op, value) { return { __type: 'where', field: field, op: op, value: value }; };
+  window.orderBy = function (field, direction) { return { __type: 'orderBy', field: field, direction: direction || 'asc' }; };
+  window.limit = function (n) { return { __type: 'limit', n: n }; };
+
+  window.query = function (baseRef) {
+    var constraints = Array.prototype.slice.call(arguments, 1);
+    var wheres = [];
+    var orderBys = [];
+    var limitVal = null;
+    constraints.forEach(function (c) {
+      if (!c) return;
+      if (c.__type === 'where') wheres.push(c);
+      else if (c.__type === 'orderBy') orderBys.push(c);
+      else if (c.__type === 'limit') limitVal = c.n;
+    });
+    return {
+      __type: 'query',
+      table: baseRef.table,
+      extraFilter: baseRef.extraFilter,
+      wheres: wheres,
+      orderBys: orderBys,
+      limitVal: limitVal,
+    };
+  };
+
+  function applyWhereOp(q, col, op, val) {
+    switch (op) {
+      case '==': return q.eq(col, val);
+      case '!=': return q.neq(col, val);
+      case '<': return q.lt(col, val);
+      case '<=': return q.lte(col, val);
+      case '>': return q.gt(col, val);
+      case '>=': return q.gte(col, val);
+      case 'in': return q.in(col, val);
+      case 'array-contains': return q.contains(col, [val]);
+      default: return q.eq(col, val);
+    }
+  }
+
+  function buildSelectQuery(refOrQuery) {
+    var table = refOrQuery.table;
+    var q = sb.from(table).select('*');
+    if (refOrQuery.extraFilter) {
+      for (var col in refOrQuery.extraFilter) {
+        if (Object.prototype.hasOwnProperty.call(refOrQuery.extraFilter, col)) {
+          q = q.eq(col, refOrQuery.extraFilter[col]);
+        }
+      }
+    }
+    var wheres = refOrQuery.wheres || [];
+    wheres.forEach(function (w) {
+      q = applyWhereOp(q, resolveColumn(table, w.field), w.op, w.value);
+    });
+    var orderBys = refOrQuery.orderBys || [];
+    orderBys.forEach(function (o) {
+      q = q.order(resolveColumn(table, o.field), { ascending: o.direction !== 'desc' });
+    });
+    if (refOrQuery.limitVal) q = q.limit(refOrQuery.limitVal);
+    return q;
+  }
+
+  // ── Snapshot shapes (mirrors Firestore's DocumentSnapshot / QuerySnapshot) ─
+  function makeDocSnapshot(table, extraFilter, row) {
+    var exists = !!row;
+    return {
+      id: row ? row.id : undefined,
+      exists: function () { return exists; },
+      data: function () { return exists ? rowToDocData(row) : undefined; },
+      ref: { __type: 'doc', table: table, id: row ? row.id : undefined, extraFilter: extraFilter },
+    };
+  }
+
+  function makeQuerySnapshot(table, extraFilter, rows) {
+    var docs = (rows || []).map(function (row) {
+      return {
+        id: row.id,
+        data: function () { return rowToDocData(row); },
+        ref: { __type: 'doc', table: table, id: row.id, extraFilter: extraFilter },
+      };
+    });
+    return {
+      docs: docs,
+      empty: docs.length === 0,
+      size: docs.length,
+      forEach: function (cb) { docs.forEach(cb); },
+    };
+  }
+
+  // ── getDoc / getDocs ────────────────────────────────────────────────────────
+  window.getDoc = function (docRef) {
+    var q = sb.from(docRef.table).select('*').eq('id', docRef.id);
+    if (docRef.extraFilter) {
+      for (var c in docRef.extraFilter) if (Object.prototype.hasOwnProperty.call(docRef.extraFilter, c)) q = q.eq(c, docRef.extraFilter[c]);
+    }
+    return q.maybeSingle().then(function (res) {
+      if (res.error) throw res.error;
+      return makeDocSnapshot(docRef.table, docRef.extraFilter, res.data);
+    });
+  };
+
+  window.getDocs = function (refOrQuery) {
+    var q = buildSelectQuery(refOrQuery);
+    return q.then(function (res) {
+      if (res.error) throw res.error;
+      return makeQuerySnapshot(refOrQuery.table, refOrQuery.extraFilter, res.data);
+    });
+  };
+
+  // ── addDoc / setDoc / updateDoc / deleteDoc ───────────────────────────────
+  window.addDoc = function (collectionRef, data) {
+    var id = generateId();
+    var fields = resolveWriteMarkers(data);
+    var ownerUid = (collectionRef.extraFilter && collectionRef.extraFilter.owner_uid) || null;
+    return sb.rpc('fs_set', { p_table: collectionRef.table, p_id: id, p_fields: fields, p_merge: false, p_owner_uid: ownerUid })
+      .then(function (res) {
+        if (res.error) throw res.error;
+        return { id: id, __type: 'doc', table: collectionRef.table, extraFilter: collectionRef.extraFilter };
+      });
+  };
+
+  window.setDoc = function (docRef, data, options) {
+    var fields = resolveWriteMarkers(data);
+    var merge = !!(options && options.merge);
+    var ownerUid = (docRef.extraFilter && docRef.extraFilter.owner_uid) || null;
+    return sb.rpc('fs_set', { p_table: docRef.table, p_id: docRef.id, p_fields: fields, p_merge: merge, p_owner_uid: ownerUid })
+      .then(function (res) {
+        if (res.error) throw res.error;
+        return undefined;
+      });
+  };
+
+  window.updateDoc = function (docRef, data) {
+    var fields = resolveWriteMarkers(data);
+    return sb.rpc('fs_update', { p_table: docRef.table, p_id: docRef.id, p_fields: fields })
+      .then(function (res) {
+        if (res.error) throw res.error;
+        return undefined;
+      });
+  };
+
+  window.deleteDoc = function (docRef) {
+    var q = sb.from(docRef.table).delete().eq('id', docRef.id);
+    if (docRef.extraFilter) {
+      for (var c in docRef.extraFilter) if (Object.prototype.hasOwnProperty.call(docRef.extraFilter, c)) q = q.eq(c, docRef.extraFilter[c]);
+    }
+    return q.then(function (res) {
+      if (res.error) throw res.error;
+      return undefined;
+    });
+  };
+
+  // ── writeBatch() ────────────────────────────────────────────────────────────
+  function FSWriteBatch() { this.ops = []; }
+  FSWriteBatch.prototype.set = function (docRef, data, options) {
+    this.ops.push({
+      op: 'set', table: docRef.table, id: docRef.id,
+      fields: resolveWriteMarkers(data), merge: !!(options && options.merge),
+      owner_uid: (docRef.extraFilter && docRef.extraFilter.owner_uid) || null,
+    });
+    return this;
+  };
+  FSWriteBatch.prototype.update = function (docRef, data) {
+    this.ops.push({ op: 'update', table: docRef.table, id: docRef.id, fields: resolveWriteMarkers(data) });
+    return this;
+  };
+  FSWriteBatch.prototype.delete = function (docRef) {
+    this.ops.push({ op: 'delete', table: docRef.table, id: docRef.id });
+    return this;
+  };
+  FSWriteBatch.prototype.commit = function () {
+    return sb.rpc('fs_batch_commit', { p_ops: this.ops }).then(function (res) {
+      if (res.error) throw res.error;
+      return res.data;
+    });
+  };
+  window.writeBatch = function () { return new FSWriteBatch(); };
+
+  // ── onSnapshot() — Firestore-style live listener emulation ────────────────
+  // Strategy: fetch the CURRENT full result immediately (matches Firestore's
+  // initial snapshot), then subscribe to Postgres realtime changes on the
+  // underlying table and, on ANY change, re-run the SAME query and re-emit the
+  // full fresh result. This is intentionally simple rather than patching
+  // individual rows client-side: it guarantees correct ordering/filtering/limit
+  // handling on every update, exactly matching what Firestore's onSnapshot
+  // guarantees, at the cost of one extra query per burst of changes (debounced),
+  // which is irrelevant at this app's scale.
+  var channelCounter = 0;
+  window.onSnapshot = function (refOrQuery, onNextOrOptions, onError) {
+    var onNext = onNextOrOptions;
+    var isDoc = refOrQuery.__type === 'doc';
+    var stopped = false;
+    var debounceTimer = null;
+
+    function fetchAndEmit() {
+      if (stopped) return;
+      var p = isDoc ? window.getDoc(refOrQuery) : window.getDocs(refOrQuery);
+      p.then(function (snap) {
+        if (!stopped) onNext(snap);
+      }).catch(function (err) {
+        if (onError) onError(err); else console.error('onSnapshot error:', err);
+      });
+    }
+
+    function scheduleRefetch() {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(fetchAndEmit, 150);
+    }
+
+    fetchAndEmit();
+
+    channelCounter += 1;
+    var channelName = 'rt-' + refOrQuery.table + '-' + channelCounter + '-' + Date.now();
+    var changeFilter = { event: '*', schema: 'public', table: refOrQuery.table };
+    if (isDoc && refOrQuery.id) changeFilter.filter = 'id=eq.' + refOrQuery.id;
+
+    var channel = sb.channel(channelName)
+      .on('postgres_changes', changeFilter, function () { scheduleRefetch(); })
+      .subscribe();
+
+    return function unsubscribe() {
+      stopped = true;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      try { sb.removeChannel(channel); } catch (e) { /* no-op */ }
+    };
+  };
+
+  // ── db handle (opaque marker object; nothing reads its internals) ─────────
+  window.db = { __isSupabaseCompatShim: true };
+
+  // ── Auth shim ────────────────────────────────────────────────────────────
+  // Firebase Anonymous Auth in the original app served exactly one purpose the
+  // rest of the code actually depends on: a STABLE uid that (a) gates data
+  // loading behind "auth is ready" and (b) scopes the private notes board.
+  // Firebase persists that anonymous session in the browser across reloads by
+  // default, so we replicate that with a uid stored in localStorage.
+  function getOrCreateAnonUid() {
+    var KEY = 'sb_anon_uid';
+    var uid = null;
+    try { uid = window.localStorage.getItem(KEY); } catch (e) { /* storage may be unavailable */ }
+    if (!uid) {
+      uid = 'anon-' + generateId();
+      try { window.localStorage.setItem(KEY, uid); } catch (e) { /* no-op */ }
+    }
+    return uid;
+  }
+
+  var authListeners = [];
+  var currentUser = null;
+
+  window.auth = { __isSupabaseCompatShim: true };
+
+  window.signInAnonymously = function () {
+    return Promise.resolve().then(function () {
+      var uid = getOrCreateAnonUid();
+      currentUser = { uid: uid, isAnonymous: true };
+      authListeners.slice().forEach(function (cb) { cb(currentUser); });
+      return { user: currentUser };
+    });
+  };
+
+  window.signInWithCustomToken = function () {
+    // No custom-token issuing backend in this deployment; a stable anonymous
+    // identity is what the rest of the app actually relies on (see above).
+    return window.signInAnonymously();
+  };
+
+  window.onAuthStateChanged = function (auth, callback) {
+    authListeners.push(callback);
+    callback(currentUser);
+    return function unsubscribe() {
+      var idx = authListeners.indexOf(callback);
+      if (idx >= 0) authListeners.splice(idx, 1);
+    };
+  };
+
+  // ── App/tenant id (kept only because business logic still references it) ─
+  window.appId = (typeof window.__app_id !== 'undefined') ? window.__app_id : 'default-app-id';
+
+})();
     </script>
 
     <style>
@@ -7276,11 +7733,15 @@
                     const snap = autoSaveSnap.current;
                     if (snap?.isSessionActive && snap?.activeCartId) {
                         try {
-                            const projectId = window.db?.app?.options?.projectId;
                             const cartId = snap.activeCartId;
-                            if (projectId && cartId) {
-                                const url = 'https://firestore.googleapis.com/v1/projects/' + projectId + '/databases/(default)/documents/artifacts/' + window.appId + '/public/data/active_carts/' + cartId + '?updateMask.fieldPaths=isActive';
-                                const body = JSON.stringify({ fields: { isActive: { booleanValue: false } } });
+                            if (cartId) {
+                                // Supabase equivalent of the old direct-REST beacon: hits the
+                                // mark_cart_inactive RPC (see supabase_migration.sql) via a plain
+                                // POST, since navigator.sendBeacon cannot set custom headers (so
+                                // the apikey is passed as a query param, which Supabase's gateway
+                                // also accepts for exactly this use case).
+                                const url = window.SUPABASE_URL + '/rest/v1/rpc/mark_cart_inactive?apikey=' + window.SUPABASE_ANON_KEY;
+                                const body = JSON.stringify({ p_id: cartId });
                                 navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
                             }
                         } catch(e) { /* silent - best effort */ }
@@ -11495,7 +11956,7 @@
                     <div className="bg-gradient-to-r from-night-900 to-sky-900 rounded-3xl p-5 md:p-6 text-white relative overflow-hidden shadow-2xl border border-slate-700 group">
                         <div className="absolute right-0 top-0 w-48 h-48 bg-gold-400 opacity-10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
                         <div className="relative z-10 flex items-center justify-between">
-                            <div><h3 className="font-bold text-xl md:text-2xl text-sky-300 mb-1 flex items-center gap-2"><Icon name="cash-register" className="text-sky-400" /> Sistem Kasir Husna</h3><p className="text-xs md:text-sm text-slate-300 font-medium opacity-90">Kelola toko lebih cepat, lebih mudah, lebih akurat ⚡</p><div className="mt-3 inline-flex items-center gap-2 bg-green-500/20 px-3 py-1 rounded-full backdrop-blur-sm border border-green-500/30"><div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div><span className="text-[10px] font-bold tracking-wide text-green-300">ONLINE (FIREBASE)</span></div></div>
+                            <div><h3 className="font-bold text-xl md:text-2xl text-sky-300 mb-1 flex items-center gap-2"><Icon name="cash-register" className="text-sky-400" /> Sistem Kasir Husna</h3><p className="text-xs md:text-sm text-slate-300 font-medium opacity-90">Kelola toko lebih cepat, lebih mudah, lebih akurat ⚡</p><div className="mt-3 inline-flex items-center gap-2 bg-green-500/20 px-3 py-1 rounded-full backdrop-blur-sm border border-green-500/30"><div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div><span className="text-[10px] font-bold tracking-wide text-green-300">ONLINE (SUPABASE)</span></div></div>
                             <div className="text-4xl text-sky-400/80 animate-pulse"><Icon name="store" /></div>
                         </div>
                     </div>
